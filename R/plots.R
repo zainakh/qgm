@@ -53,7 +53,7 @@ plot.quantile.dag <- function(data, tau, verbose=FALSE) {
   data <- jitter.columns(data, factor=0.1)
   pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
 
-  res <- marginal.test(data, tau=tau)
+  lookup_table <- marginal.test(data, tau=tau)
 
   colnames(lookup_table) <- colnames(data)
   rownames(lookup_table) <- colnames(data)
