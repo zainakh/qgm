@@ -78,17 +78,22 @@ quantile.ztest <- function (x, y, S, suffStat) {
   }
 }
 
-#' Returns the marginal quantile association for all pairs of variables in a dataframe.
+#' Returns the  quantile association for all pairs of variables in a dataframe.
 #'
 #' Runs a double for loop across all columns and calculates the quantile association
 #' statistic for all possible pairs. Depending on if the quantile level is above or
 #' below the median, the statistic will consider if the residuals are jointly above or
 #' jointly below their respective marginal regression lines.
 #'
+#' This test has two types where it considers marginal associations of variables or
+#' considers the conditional case where each quantile regression is conditional w.r.t
+#' all other variables in the dataframe.
+#'
 #' @param data Input dataframe of data
 #' @param tau A particular quantile level (0 to 1, not inclusive)
+#' @param type If weights of the regression should be marginal or conditional on all other variables
 #' @return An n by n matrix (where n is the number of columns in data) that contains the marginal relationships of each pair of columns
-marginal.test <- function(data, tau) {
+pairwise.test <- function(data, tau, type="marginal") {
   num_cols <- length((colnames(data)))
 
   zstat_above <- matrix(0, nrow=num_cols, ncol=num_cols)
@@ -102,8 +107,16 @@ marginal.test <- function(data, tau) {
       var1 <- data[,x]
       var2 <- data[,y]
 
-      q1 <- quantreg::rq(var1 ~ 1, tau=tau)
-      q2 <- quantreg::rq(var2 ~ 1, tau=tau)
+      if(type == "marginal") {
+        q1 <- quantreg::rq(var1 ~ 1, tau=tau)
+        q2 <- quantreg::rq(var2 ~ 1, tau=tau)
+      }
+      else {
+        col1 <- colnames(data)[x]
+        col2 <- colnames(data)[y]
+        q1 <- quantreg::rq(as.formula(paste0(col1, " ~ .")), tau=tau, data=data)
+        q2 <- quantreg::rq(as.formula(paste0(col2, " ~ .")), tau=tau, data=data)
+      }
 
       fit.q1 <- fitted(q1)
       fit.q2 <- fitted(q2)

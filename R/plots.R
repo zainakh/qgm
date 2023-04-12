@@ -13,11 +13,12 @@ igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
                    vertex.size=50, vertex.color="lightblue",...){
 
   g <- igraph::graph_from_graphnel(as(g, "graphNEL"))
+  g <- igraph::as.undirected(g, mode="each")
   op <- par(mar=c(1,1,1,1))
 
   if (weights == TRUE){
     ew <- round(igraph::get.edge.attribute(g,"weight"),2)
-    igraph::plot.igraph(g,layout=layout,edge.label=ew,edge.label.cex=0.9, vertex.size=vertex.size,vertex.color=vertex.color,...)
+    igraph::plot.igraph(g,layout=layout,edge.label=ew,vertex.size=vertex.size,vertex.color=vertex.color,...)
   }
   else {
     igraph::plot.igraph(g,layout=layout,vertex.size=vertex.size,vertex.color=vertex.color,...)
@@ -41,10 +42,13 @@ igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #'
 #' @param data A data frame of data with unique column/rownames
 #' @param tau A particular quantile level (0 to 1, not inclusive)
+#' @param weights Weights will either be "marginal" (marginal association)
+#' or "conditional" (association conditioned on everything) - default is
+#' "marginal" (otherwise they will not be used)
 #' @return
 #' @examples
 #' plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, verbose=FALSE) {
+plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
@@ -53,7 +57,12 @@ plot.quantile.dag <- function(data, tau, verbose=FALSE) {
   data <- jitter.columns(data, factor=0.1)
   pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
 
-  lookup_table <- marginal.test(data, tau=tau)
+  n <- length((colnames(data)))
+  lookup_table <- matrix(0, nrow=n, ncol=n)
+  use.weights <- tolower(weights) %in% c("conditional", "marginal")
+  if(use.weights) {
+    lookup_table <- pairwise.test(data, tau=tau, type=tolower(weights))
+  }
 
   colnames(lookup_table) <- colnames(data)
   rownames(lookup_table) <- colnames(data)
@@ -71,5 +80,5 @@ plot.quantile.dag <- function(data, tau, verbose=FALSE) {
   pc_graph@graph@edgeData@data = data_var
   unlink("tau.rds")
 
-  igplot(pc_graph@graph, weights=TRUE)
+  igplot(pc_graph@graph, weights=use.weights)
 }
