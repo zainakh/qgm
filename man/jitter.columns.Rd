@@ -11,6 +11,9 @@ jitter.columns(data, factor = 0.1)
 
 \item{factor}{A float to scale the jittering by (if greater than 2.5, there is a risk of quantile crossings)}
 }
+\value{
+Jittered version of your input dataframe
+}
 \description{
 Goes column by column in the dataframe and adds jitter from the distribution
 }

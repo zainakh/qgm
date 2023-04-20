@@ -4,12 +4,19 @@
 \alias{plot.quantile.dag}
 \title{Calculate the graph of variable relationships at a particular quantile level.}
 \usage{
-\method{plot}{quantile.dag}(data, tau, verbose = FALSE)
+\method{plot}{quantile.dag}(data, tau, weights = "marginal", verbose = FALSE)
 }
 \arguments{
 \item{data}{A data frame of data with unique column/rownames}
 
 \item{tau}{A particular quantile level (0 to 1, not inclusive)}
+
+\item{weights}{Weights will either be "marginal" (marginal association)
+or "conditional" (association conditioned on everything) - default is
+"marginal" (otherwise they will not be used)}
+}
+\value{
+Nothing
 }
 \description{
 It assumes the input dataframe has at least two columns (columns are variables) and that

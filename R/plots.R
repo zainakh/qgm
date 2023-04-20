@@ -8,7 +8,7 @@
 #' @param layout A layout to organize the graph with
 #' @param vertex.size A node size for the graph
 #' @param vertex.color Specify the color of nodes in the graph
-#' @return
+#' @return Nothing
 igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
                    vertex.size=50, vertex.color="lightblue",...){
 
@@ -45,9 +45,8 @@ igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param weights Weights will either be "marginal" (marginal association)
 #' or "conditional" (association conditioned on everything) - default is
 #' "marginal" (otherwise they will not be used)
-#' @return
-#' @examples
-#' plot.quantile.dag(df, tau=0.5)
+#' @return Nothing
+#' @examples plot.quantile.dag(df, tau=0.5)
 plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
@@ -61,7 +60,7 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
   lookup_table <- matrix(0, nrow=n, ncol=n)
   use.weights <- tolower(weights) %in% c("conditional", "marginal")
   if(use.weights) {
-    lookup_table <- pairwise.test(data, tau=tau, type=tolower(weights))
+    lookup_table <- pairwise.test(data, tau=tau, weights=tolower(weights))
   }
 
   colnames(lookup_table) <- colnames(data)
@@ -81,4 +80,40 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
   unlink("tau.rds")
 
   igplot(pc_graph@graph, weights=use.weights)
+}
+
+
+#' Calculates the table of marginal relationships at a particular quantile level.
+#'
+#' It assumes the input dataframe has at least two columns (columns are variables) and that
+#' the quantile level is between 0 and 1 (non-inclusive). Additionally it assumes all
+#' column names are unique.
+#'
+#' This function uses calculations from the quantile concordance statistic
+#' in pairwise.test and plots it in a nicer table format.
+#'
+#' If weights is equal to "cor" the pariwise Pearson correlation table is
+#' returned.
+#'
+#' @param data A data frame of data with unique column/rownames
+#' @param tau A particular quantile level (0 to 1, not inclusive)
+#' @param weights Weights will either be "marginal" (marginal association)
+#' or "conditional" (association conditioned on everything) - default is
+#' "marginal" (otherwise they will not be used)
+#' @return Nothing
+#' @examples plot.marginal.table(df, tau=0.5, weights="marginal")
+plot.marginal.table <- function(df, tau, weights="marginal") {
+  if (weights == "cor") {
+    table.data <- cor(df)
+  }
+  else{
+    table.data <- pairwise.test(df, tau, weights)
+  }
+
+  data <- expand.grid(X=colnames(df), Y=colnames(df))
+  data$P <- as.vector(table.data)
+  ggplot2::ggplot(data, aes(X, Y, fill=P)) +
+    ggplot2::geom_tile() +
+    ggplot2::scale_fill_gradient(low="white", high="blue") +
+    ggplot2::geom_text(aes(label=round(P, digits=3)))
 }

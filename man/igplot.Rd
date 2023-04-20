@@ -24,6 +24,9 @@ igplot(
 
 \item{vertex.color}{Specify the color of nodes in the graph}
 }
+\value{
+Nothing
+}
 \description{
 Constructs igraph object from graphnel type and adds weights (if passed in).
 Default layout is in a circle so graphs are easily comparable.

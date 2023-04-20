@@ -9,7 +9,7 @@
 #'
 #' @param data Input dataframe of data
 #' @param factor A float to scale the jittering by (if greater than 2.5, there is a risk of quantile crossings)
-#' @return
+#' @return Jittered version of your input dataframe
 jitter.columns <- function(data, factor=0.1) {
   num_cols <- length((colnames(data)))
 
@@ -93,7 +93,7 @@ quantile.ztest <- function (x, y, S, suffStat) {
 #' @param tau A particular quantile level (0 to 1, not inclusive)
 #' @param type If weights of the regression should be marginal or conditional on all other variables
 #' @return An n by n matrix (where n is the number of columns in data) that contains the marginal relationships of each pair of columns
-pairwise.test <- function(data, tau, type="marginal") {
+pairwise.test <- function(data, tau, weights="marginal") {
   num_cols <- length((colnames(data)))
 
   zstat_above <- matrix(0, nrow=num_cols, ncol=num_cols)
@@ -107,7 +107,7 @@ pairwise.test <- function(data, tau, type="marginal") {
       var1 <- data[,x]
       var2 <- data[,y]
 
-      if(type == "marginal") {
+      if(weights == "marginal") {
         q1 <- quantreg::rq(var1 ~ 1, tau=tau)
         q2 <- quantreg::rq(var2 ~ 1, tau=tau)
       }
