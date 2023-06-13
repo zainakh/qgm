@@ -2,19 +2,23 @@
 % Please edit documentation in R/quantile_association.R
 \name{pairwise.test}
 \alias{pairwise.test}
-\title{Returns the  quantile association for all pairs of variables in a dataframe.}
+\title{Performs a hypothesis test of two variables given a conditioning set and returns
+a p-value on if they are independent (p > 0.05) or not (p <= 0.05).}
 \usage{
-pairwise.test(data, tau, weights = "marginal")
+pairwise.test(data, tau, weights = "marginal", split = FALSE)
 }
 \arguments{
 \item{data}{Input dataframe of data}
 
 \item{tau}{A particular quantile level (0 to 1, not inclusive)}
 
+\item{split}{If you should split the data for more efficient estimates (fits twice as many models)}
+
 \item{type}{If weights of the regression should be marginal or conditional on all other variables}
 }
 \value{
-An n by n matrix (where n is the number of columns in data) that contains the marginal relationships of each pair of columns
+An n by n matrix (where n is the number of columns in data) that contains
+the marginal relationships of each pair of columns
 }
 \description{
 Runs a double for loop across all columns and calculates the quantile association

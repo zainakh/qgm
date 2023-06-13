@@ -4,7 +4,7 @@
 \alias{plot.quantile.dag}
 \title{Calculate the graph of variable relationships at a particular quantile level.}
 \usage{
-\method{plot}{quantile.dag}(data, tau, weights = "marginal", verbose = FALSE)
+\method{plot}{quantile.dag}(data, tau, weights = "marginal", verbose = FALSE, split = FALSE)
 }
 \arguments{
 \item{data}{A data frame of data with unique column/rownames}
@@ -14,6 +14,8 @@
 \item{weights}{Weights will either be "marginal" (marginal association)
 or "conditional" (association conditioned on everything) - default is
 "marginal" (otherwise they will not be used)}
+
+\item{split}{If you should split the data for more efficient estimates (fits twice as many models)}
 }
 \value{
 Nothing

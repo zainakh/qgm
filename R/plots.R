@@ -45,16 +45,22 @@ igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param weights Weights will either be "marginal" (marginal association)
 #' or "conditional" (association conditioned on everything) - default is
 #' "marginal" (otherwise they will not be used)
+#' @param split If you should split the data for more efficient estimates (fits twice as many models)
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
+plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, split=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
 
   saveRDS(tau, "tau.rds")
   data <- jitter.columns(data, factor=0.1)
-  pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+  if(split) {
+    pc_graph <- pcalg::pc(data, indepTest = split.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+  }
+  else {
+    pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+  }
 
   n <- length((colnames(data)))
   lookup_table <- matrix(0, nrow=n, ncol=n)
@@ -100,14 +106,15 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE) {
 #' @param weights Weights will either be "marginal" (marginal association)
 #' or "conditional" (association conditioned on everything) - default is
 #' "marginal" (otherwise they will not be used)
+#' @param split If you should split the data for more efficient estimates (fits twice as many models)
 #' @return Nothing
 #' @examples plot.marginal.table(df, tau=0.5, weights="marginal")
-plot.marginal.table <- function(df, tau, weights="marginal") {
+plot.marginal.table <- function(df, tau, weights="marginal", split=FALSE) {
   if (weights == "cor") {
     table.data <- cor(df)
   }
   else{
-    table.data <- pairwise.test(df, tau, weights)
+    table.data <- pairwise.test(df, tau, weights, split)
   }
 
   data <- expand.grid(X=colnames(df), Y=colnames(df))

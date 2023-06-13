@@ -4,7 +4,7 @@
 \alias{plot.marginal.table}
 \title{Calculates the table of marginal relationships at a particular quantile level.}
 \usage{
-\method{plot}{marginal.table}(df, tau, weights = "marginal")
+\method{plot}{marginal.table}(df, tau, weights = "marginal", split = FALSE)
 }
 \arguments{
 \item{tau}{A particular quantile level (0 to 1, not inclusive)}
@@ -12,6 +12,8 @@
 \item{weights}{Weights will either be "marginal" (marginal association)
 or "conditional" (association conditioned on everything) - default is
 "marginal" (otherwise they will not be used)}
+
+\item{split}{If you should split the data for more efficient estimates (fits twice as many models)}
 
 \item{data}{A data frame of data with unique column/rownames}
 }
