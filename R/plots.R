@@ -9,7 +9,7 @@
 #' @param vertex.size A node size for the graph
 #' @param vertex.color Specify the color of nodes in the graph
 #' @return Nothing
-igplot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
+qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
                    vertex.size=50, vertex.color="lightblue",...){
 
   g <- igraph::graph_from_graphnel(as(g, "graphNEL"))
@@ -85,7 +85,7 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
   pc_graph@graph@edgeData@data = data_var
   unlink("tau.rds")
 
-  igplot(pc_graph@graph, weights=use.weights)
+  qgm.igraph.plot(pc_graph@graph, weights=use.weights)
 }
 
 
