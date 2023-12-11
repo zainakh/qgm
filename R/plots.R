@@ -61,7 +61,7 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
   else {
     if(correl) {
       suffStat <- list(C = cor(data), n = nrow(data))
-      pc_graph <- pcalg::pc(suffStat, indepTest = gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+      pc_graph <- pcalg::pc(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
     }
     else{
       pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
