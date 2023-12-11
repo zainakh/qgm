@@ -13,7 +13,7 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
                    vertex.size=50, vertex.color="lightblue",...){
 
   g <- igraph::graph_from_graphnel(as(g, "graphNEL"))
-  g <- igraph::as.undirected(g, mode="each")
+  g <- igraph::as.undirected(g, mode="collapse")
   op <- par(mar=c(1,1,1,1))
 
   if (weights == TRUE){
@@ -48,7 +48,7 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param split If you should split the data for more efficient estimates (fits twice as many models)
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, split=FALSE) {
+plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, split=FALSE, correl=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
@@ -59,7 +59,13 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
     pc_graph <- pcalg::pc(data, indepTest = split.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
   }
   else {
-    pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+    if(correl) {
+      suffStat <- list(C = cor(data), n = nrow(data))
+      pc_graph <- pcalg::pc(suffStat, indepTest = gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+    }
+    else{
+      pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+    }
   }
 
   n <- length((colnames(data)))
