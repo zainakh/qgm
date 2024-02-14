@@ -45,18 +45,18 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param weights Weights will either be "marginal" (marginal association)
 #' or "conditional" (association conditioned on everything) - default is
 #' "marginal" (otherwise they will not be used)
-#' @param split If you should split the data for more efficient estimates (fits twice as many models)
+#' @param quacc If you want to calculate the linear QuACC statistic versus the general no train/test statistic
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, split=FALSE, correl=FALSE) {
+plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, quacc=FALSE, correl=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
 
   saveRDS(tau, "tau.rds")
-  data <- jitter.columns(data, factor=0.1)
-  if(split) {
-    pc_graph <- pcalg::pc(data, indepTest = split.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+  #data <- jitter.columns(data, factor=0.1)
+  if(quacc) {
+    pc_graph <- pcalg::pc(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE)
   }
   else {
     if(correl) {
@@ -64,7 +64,7 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
       pc_graph <- pcalg::pc(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
     }
     else{
-      pc_graph <- pcalg::pc(data, indepTest = quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+      pc_graph <- pcalg::pc(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
     }
   }
 
@@ -72,7 +72,7 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
   lookup_table <- matrix(0, nrow=n, ncol=n)
   use.weights <- tolower(weights) %in% c("conditional", "marginal")
   if(use.weights) {
-    lookup_table <- pairwise.test(data, tau=tau, weights=tolower(weights))
+    lookup_table <- pairwise.test(data, tau=tau, weights=tolower(weights), quacc=quacc)
   }
 
   colnames(lookup_table) <- colnames(data)
@@ -112,15 +112,15 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, spli
 #' @param weights Weights will either be "marginal" (marginal association)
 #' or "conditional" (association conditioned on everything) - default is
 #' "marginal" (otherwise they will not be used)
-#' @param split If you should split the data for more efficient estimates (fits twice as many models)
+#' @param quacc If you want to calculate the linear QuACC statistic versus the standard no train/test split statistic
 #' @return Nothing
 #' @examples plot.marginal.table(df, tau=0.5, weights="marginal")
-plot.marginal.table <- function(df, tau, weights="marginal", split=FALSE) {
+plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE) {
   if (weights == "cor") {
     table.data <- cor(df)
   }
   else{
-    table.data <- pairwise.test(df, tau, weights, split)
+    table.data <- pairwise.test(df, tau, weights, quacc)
   }
 
   data <- expand.grid(X=colnames(df), Y=colnames(df))

@@ -19,6 +19,153 @@ jitter.columns <- function(data, factor=0.1) {
 }
 
 
+#' Calculate density of a particular variable using the Hendricks-Koenker sandwich.
+#'
+#' @param rq.object Quantile regression object (currently supports linear quantile regression)
+#' @param x Not the index, but the actual values of column x with a padded intercept
+#' @param y Not the index, but the actual values of column y with a padded intercept
+#' @param hs Which way to calculate the bandwidth of quantiles
+#' @return Jittered version of your input data frame
+koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
+  # Get constants
+  eps <- .Machine$double.eps^(1/2)
+  tau <- rq.object$tau
+  n <- length(y)
+
+  # Check for valid h
+  h <- quantreg::bandwidth.rq(tau, n, hs = hs)
+  while((tau - h < 0) || (tau + h > 1)) h <- h/2
+
+  # Calculate Hendricks-Koenker sandwich
+  bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
+  blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
+
+  dyhat <- as.matrix(x) %*% (bhi - blo)
+  f <- pmax(0, (2 * h)/(dyhat - eps))
+  return(f)
+}
+
+#' Tests QuACC given linear quantile regression estimators.
+#'
+#' @param x Index of a column
+#' @param y Index of a column (not equal to x)
+#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
+#' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
+#' @return pvalue corresponding to if the quantile level
+linear.quacc <- function(x, y, S, suffStat) {
+
+  koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
+    # Get constants
+    eps <- .Machine$double.eps^(1/2)
+    tau <- rq.object$tau
+    n <- length(y)
+
+    # Check for valid h
+    h <- quantreg::bandwidth.rq(tau, n, hs = hs)
+    while((tau - h < 0) || (tau + h > 1)) h <- h/2
+
+    # Calculate Hendricks-Koenker sandwich
+    if(filter){ # Filter for y, the regressor
+
+      x.filt <- x[filt.indices, , drop = FALSE]
+      y.filt <- y[filt.indices]
+
+      bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h, method = rq.object$method)$coef
+      blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h, method = rq.object$method)$coef
+    }
+    else{ # Assume independence in density of var y and another variable that dictates filt.indices
+      bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
+      blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
+    }
+
+    dyhat <- as.matrix(x) %*% (bhi - blo)
+    f <- pmax(0, (2 * h)/(dyhat - eps))
+    return(f)
+  }
+
+  tau <- readRDS("tau.rds")
+  data <- suffStat
+
+  n <- length(data[,1])
+  data.train <- data[1:(n%/%2), ] # Split in half train, half test
+  data.test <- data[(1 + (n%/%2)):n, ]
+  n.test <- length(data.test[,1])
+  var1.test <- data.test[, x]
+  var2.test <- data.test[, y]
+
+  if(length(S) == 0){
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                       data.train,
+                       tau=tau)
+  }
+  else {
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+  }
+
+  fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+  fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+  # CDF estimations
+  F.ecdf <- ecdf(var1.test)
+  G.ecdf <- ecdf(var2.test)
+
+  # Calculate QuACC and normalize
+  if(tau < 0.5) {
+    c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+    quacc <- c.below - tau^2
+
+    filt.indices.var1 <- which(var2.test < fit.q2)
+    filt.indices.var2 <- which(var1.test < fit.q1)
+
+    C <- as.matrix(F.ecdf(fit.q1))
+    D <- as.matrix(G.ecdf(fit.q2))
+  }
+  else{
+    c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+    quacc <- c.above - (1 - tau)^2
+
+    filt.indices.var1 <- which(var2.test > fit.q2)
+    filt.indices.var2 <- which(var1.test > fit.q1)
+
+    C <- 1 - as.matrix(F.ecdf(fit.q1))
+    D <- 1 - as.matrix(G.ecdf(fit.q2))
+  }
+
+  s1 <- summary(q1, cov=TRUE, se='nid')
+  s2 <- summary(q2, cov=TRUE, se='nid')
+  padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
+
+  # Density estimations
+  A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1)))
+  B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2)))
+
+  # Compute variance terms in QuACC
+  kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
+  kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+
+  # Compute QuACC
+  sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
+  sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
+  quacc <- quacc / sqrt( ((tau^2 * (1 - tau)^2) / n.test + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) )
+
+  # Calculate p-value of QuACC
+  p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
+  return(p_val)
+}
+
+
 #' Performs a hypothesis test of two variables given a conditioning set and returns
 #' a p-value on if they are independent (p > 0.05) or not (p <= 0.05).
 #'
@@ -36,7 +183,7 @@ jitter.columns <- function(data, factor=0.1) {
 #' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
 #' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
 #' @return pvalue corresponding to if the quantile level
-quantile.ztest <- function (x, y, S, suffStat) {
+orig.quantile.ztest <- function (x, y, S, suffStat) {
   tau <- readRDS("tau.rds")
   n <- length(suffStat[,x])
 
@@ -77,108 +224,6 @@ quantile.ztest <- function (x, y, S, suffStat) {
   }
 }
 
-#' Performs a hypothesis test of two variables given a conditioning set and returns
-#' a p-value on if they are independent (p > 0.05) or not (p <= 0.05).
-#'
-#' In contrast from the original quantile.ztest
-#' method, this method splits up data into halves and calculates the statistic
-#' using a model trained on either the first or second half and predicts the
-#' conditional quantile on the opposite half.
-#'
-#' This test should have additional robustness and lower variance compared
-#' to the original quantile.ztest method, but fits twice as many models.
-#'
-#' @param x Index of a column
-#' @param y Index of a column (not equal to x)
-#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
-#' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
-#' @return pvalue corresponding to if the quantile level
-split.quantile.ztest <- function(x, y, S, suffStat) {
-  tau <- readRDS("tau.rds")
-
-  data <- suffStat
-  n <- length(data[,x])
-
-  data.first <- data[1:(n%/%2), ]
-  data.second <- data[(1 + (n%/%2)):n, ]
-
-  first.half.len <- length(data.first[,x])
-  second.half.len <- length(data.second[,x])
-
-  var1.first <- data.first[, x]
-  var2.first <- data.first[, y]
-  var1.second <- data.second[, x]
-  var2.second <- data.second[, y]
-
-  if(length(S) == 0){
-    q1.first <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ 1")), tau = tau, data=data.first)
-    q2.first <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ 1")), tau = tau, data=data.first)
-    q1.second <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ 1")), tau = tau, data=data.second)
-    q2.second <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ 1")), tau = tau, data=data.second)
-  }
-  else {
-    q1.first <- quantreg::rq(
-      as.formula(paste(colnames(data)[x], "~",
-                       paste(colnames(data)[S], collapse = "+"),
-                       sep = ""
-      )),
-      tau = tau,
-      data=data.first
-    )
-    q2.first <- quantreg::rq(
-      as.formula(paste(colnames(data)[y], "~",
-                       paste(colnames(data)[S], collapse = "+"),
-                       sep = ""
-      )),
-      tau = tau,
-      data=data.first
-    )
-    q1.second <- quantreg::rq(
-      as.formula(paste(colnames(data)[x], "~",
-                       paste(colnames(data)[S], collapse = "+"),
-                       sep = ""
-      )),
-      tau = tau,
-      data=data.second
-    )
-    q2.second <- quantreg::rq(
-      as.formula(paste(colnames(data)[y], "~",
-                       paste(colnames(data)[S], collapse = "+"),
-                       sep = ""
-      )),
-      tau = tau,
-      data=data.second
-    )
-  }
-
-  pred.q1.first <- predict(q1.first, newdata=data.second[, S, drop=FALSE])
-  pred.q2.first <- predict(q2.first, newdata=data.second[, S, drop=FALSE])
-  pred.q1.second <- predict(q1.second, newdata=data.first[, S, drop=FALSE])
-  pred.q2.second <- predict(q2.second, newdata=data.first[, S, drop=FALSE])
-
-  ptilde_b.first <- sum((var1.first < pred.q1.second) & (var2.first < pred.q2.second)) * (1 / first.half.len)
-  phat_a.first <- sum((var1.first > pred.q1.second) & (var2.first > pred.q2.second)) * (1 / first.half.len)
-  ptilde_b.second <- sum((var1.second < pred.q1.first) & (var2.second < pred.q2.first)) * (1 / second.half.len)
-  phat_a.second <- sum((var1.second > pred.q1.first) & (var2.second > pred.q2.first)) * (1 / second.half.len)
-
-  zstat_b.first <- (ptilde_b.first - tau^2) / sqrt( tau^2 * (1-tau)^2 / (first.half.len) )
-  zstat_a.first <- (phat_a.first - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / (first.half.len) )
-  zstat_b.second <- (ptilde_b.second - tau^2) / sqrt( tau^2 * (1-tau)^2 / (second.half.len) )
-  zstat_a.second <- (phat_a.second - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / (second.half.len) )
-
-  zstat.above <- ((zstat_a.first + zstat_a.second) / sqrt(2))
-  zstat.below <- ((zstat_b.first + zstat_b.second) / sqrt(2))
-
-  p_val_below <- 2 * pnorm(abs(zstat.below), lower.tail = FALSE)
-  p_val_above <- 2 * pnorm(abs(zstat.above), lower.tail = FALSE)
-
-  if (tau < 0.5) {
-    return(p_val_below)
-  }
-  else {
-    return(p_val_above)
-  }
-}
 
 #' Performs a hypothesis test of two variables given a conditioning set and returns
 #' a p-value on if they are independent (p > 0.05) or not (p <= 0.05).
@@ -195,10 +240,10 @@ split.quantile.ztest <- function(x, y, S, suffStat) {
 #' @param data Input dataframe of data
 #' @param tau A particular quantile level (0 to 1, not inclusive)
 #' @param type If weights of the regression should be marginal or conditional on all other variables
-#' @param split If you should split the data for more efficient estimates (fits twice as many models)
+#' @param quacc If you should use the linear QuACC or use the standard non train test split statistic
 #' @return An n by n matrix (where n is the number of columns in data) that contains
 #' the marginal relationships of each pair of columns
-pairwise.test <- function(data, tau, weights="marginal", split=FALSE) {
+pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
   num_cols <- length((colnames(data)))
 
   zstat_above <- matrix(0, nrow=num_cols, ncol=num_cols)
@@ -209,51 +254,75 @@ pairwise.test <- function(data, tau, weights="marginal", split=FALSE) {
 
       n <- length(data[,x])
 
-      if(split) { # Split data
-        data.first <- data[1:(n%/%2), ]
-        data.second <- data[(1 + (n%/%2)):n, ]
+      if(quacc) {
+        data.train <- data[1:(n%/%2), ] # Split in half train, half test
+        data.test <- data[(1 + (n%/%2)):n, ]
+        n.test <- length(data.test[,1])
+        var1.test <- data.test[, x]
+        var2.test <- data.test[, y]
+        col1 <- colnames(data)[x]
+        col2 <- colnames(data)[y]
 
-        first.half.len <- length(data.first[,x])
-        second.half.len <- length(data.second[,x])
+        if(weights == "marginal"){
+          q1 <- quantreg::rq(as.formula(paste0(col1, " ~ 1")), tau=tau, data=data)
+          q2 <- quantreg::rq(as.formula(paste0(col2, " ~ 1")), tau=tau, data=data)
 
-        var1.first <- data.first[, x]
-        var2.first <- data.first[, y]
-        var1.second <- data.second[, x]
-        var2.second <- data.second[, y]
+          S <- c()
+          fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+          fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
 
-        if(weights == "marginal") {
-          q1.first <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ 1")), tau = tau, data=data.first)
-          q2.first <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ 1")), tau = tau, data=data.first)
-          q1.second <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ 1")), tau = tau, data=data.second)
-          q2.second <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ 1")), tau = tau, data=data.second)
+          padded.z <- as.matrix(rep(1, n.test))
         }
         else {
-          q1.first <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ .")), tau = tau, data=data.first)
-          q2.first <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ .")), tau = tau, data=data.first)
-          q1.second <- quantreg::rq(as.formula(paste(colnames(data)[x], "~ .")), tau = tau, data=data.second)
-          q2.second <- quantreg::rq(as.formula(paste(colnames(data)[y], "~ .")), tau = tau, data=data.second)
+          S <- 1:num_cols
+          S <- S[-c(x, y)]
+
+          q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                              paste(colnames(data)[S], collapse = "+"), sep = "")),
+                             data.train,
+                             tau=tau)
+
+          q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                              paste(colnames(data)[S], collapse = "+"), sep = "")),
+                             data.train,
+                             tau=tau)
+
+          fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+          fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+          padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
         }
 
-        # Even if the weights are marginal, this prediction will still work even though we give newdata when its a marginal formula
-        pred.q1.first <- predict(q1.first, newdata=data.second[, -c(x), drop=FALSE])
-        pred.q2.first <- predict(q2.first, newdata=data.second[, -c(y), drop=FALSE])
-        pred.q1.second <- predict(q1.second, newdata=data.first[, -c(x), drop=FALSE])
-        pred.q2.second <- predict(q2.second, newdata=data.first[, -c(y), drop=FALSE])
+        # Calculate QuACC and normalize
+        c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+        quacc.low <- c.below - tau^2
+        c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+        quacc.high <- c.above - (1 - tau)^2
 
-        ptilde_b.first <- sum((var1.first < pred.q1.second) & (var2.first < pred.q2.second)) * (1 / first.half.len)
-        phat_a.first <- sum((var1.first > pred.q1.second) & (var2.first > pred.q2.second)) * (1 / first.half.len)
-        ptilde_b.second <- sum((var1.second < pred.q1.first) & (var2.second < pred.q2.first)) * (1 / second.half.len)
-        phat_a.second <- sum((var1.second > pred.q1.first) & (var2.second > pred.q2.first)) * (1 / second.half.len)
+        s1 <- summary(q1, cov=TRUE, se='nid')
+        s2 <- summary(q2, cov=TRUE, se='nid')
 
-        zstat_b.first <- (ptilde_b.first - tau^2) / sqrt( tau^2 * (1-tau)^2 / (first.half.len) )
-        zstat_a.first <- (phat_a.first - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / (first.half.len) )
-        zstat_b.second <- (ptilde_b.second - tau^2) / sqrt( tau^2 * (1-tau)^2 / (second.half.len) )
-        zstat_a.second <- (phat_a.second - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / (second.half.len) )
+        # Density estimations
+        A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test))) # Assume independence between 2 for now
+        B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test))) # Assume independence between 2 for now
 
-        zstat_above[x, y] <- ((zstat_a.first + zstat_a.second) / sqrt(2))
-        zstat_below[x, y] <- ((zstat_b.first + zstat_b.second) / sqrt(2))
+        # CDF estimations
+        F.ecdf <- ecdf(var1.test)
+        G.ecdf <- ecdf(var2.test)
+        C <- as.matrix(F.ecdf(fit.q1))
+        D <- as.matrix(G.ecdf(fit.q2))
+
+        kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
+        kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+
+        sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
+        sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
+
+        zstat_below[x, y] <- quacc.low / sqrt( ((tau^2 * (1 - tau^2)) / n.test + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) )
+        zstat_above[x, y] <- quacc.high / sqrt( ((tau^2 * (1 - tau^2)) / n.test + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) )
+
       }
-      else { # Don't split data
+      else { # Don't use QuACC
         var1 <- data[,x]
         var2 <- data[,y]
 
