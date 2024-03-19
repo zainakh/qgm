@@ -18,6 +18,68 @@ jitter.columns <- function(data, factor=0.1) {
   return(data)
 }
 
+#' Calculates one of three similarity metrics for use in evaluating graph prediction.
+#'
+#' @param actual Actual adjacency matrix as a vector (binary values only)
+#' @param predicted Predicted adjacency matrix as a vector (binary values only)
+#' @param precision Precision between actual/predicted
+#' @param recall Recall of edge presence
+#' @param hamming Hamming distance between the two
+#' @return One of the three similarity metrics above
+adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE, hamming=FALSE) {
+  if(length(actual) != length(predicted)) {
+    return("Vectors need to be of same length")
+  }
+  if(precision) {
+    if(sum(predicted) == 0) {
+      return('Divide by 0 error')
+    }
+    res <- sum(actual & predicted) / sum(predicted)
+  }
+
+  if(recall) {
+    if(sum(actual) == 0) {
+      return('Divide by 0 error')
+    }
+    res <- sum(actual & predicted) / sum(actual)
+  }
+  if(hamming) {
+    res <- mean(actual != predicted)
+  }
+
+  return(res)
+}
+
+#' Calculates skeleton of QGM graph based on different independence tests.
+#'
+#' @param data Input data frame of data
+#' @param tau Quantile level of interest (from 0 to 1, non-inclusive)
+#' @param quacc Use QuACC hypothesis test
+#' @param correl Use Gaussian CI test
+#' @param verbose Print verbose independence tests results
+#' @param adj_vector Return vector form of adjacency matrix
+#' @return Graph or adjacency vector of underlying relationships
+calculate.skeleton <- function(data, tau, quacc=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
+  saveRDS(tau, "tau.rds")
+  if(quacc) {
+    pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE)
+  }
+  else {
+    if(correl) {
+      suffStat <- list(C = cor(data), n = nrow(data))
+      pc_graph <- pcalg::skeleton(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+    }
+    else{
+      pc_graph <- pcalg::skeleton(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+    }
+  }
+  unlink("tau.rds")
+  if(adj_vector) {
+    adj.mat <- as(pc_graph, "amat")
+    return(as.vector(adj.mat))
+  }
+  return(pc_graph)
+}
 
 #' Calculate density of a particular variable using the Hendricks-Koenker sandwich.
 #'
@@ -44,6 +106,78 @@ koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
   f <- pmax(0, (2 * h)/(dyhat - eps))
   return(f)
 }
+
+
+#' QuACC when normalized between -1 and 1 using linear regression estimators.
+#'
+#' @param x Index of a column
+#' @param y Index of a column (not equal to x)
+#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
+#' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
+#' @return pvalue corresponding to if the quantile level
+linear.quacc.rho <- function(x, y, S, suffStat) {
+
+  tau <- readRDS("tau.rds")
+  data <- suffStat
+
+  n <- length(data[,1])
+  data.train <- data[1:(n%/%2), ]
+  data.test <- data[(1 + (n%/%2)):n, ]
+  n.test <- length(data.test[,1])
+  var1.test <- data.test[, x]
+  var2.test <- data.test[, y]
+
+  if(length(S) == 0){
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                       data.train,
+                       tau=tau)
+  }
+  else {
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+  }
+
+  fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+  fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+
+  # Calculate QuACC and normalize
+  if(tau <= 0.5) {
+    c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+    quacc <- c.below - tau^2
+
+    if(quacc > 0) {
+      quacc <- quacc / (tau - tau^2)
+    }
+    else{
+      quacc <- quacc / tau^2
+    }
+  }
+  else{
+    c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+    quacc <- c.above - (1 - tau)^2
+    if(quacc > 0) {
+      quacc <- quacc / ((1 - tau) - (1 - tau)^2)
+    }
+    else{
+      quacc <- quacc / ((1 - tau)^2)
+    }
+  }
+
+  return(quacc)
+}
+
 
 #' Tests QuACC given linear quantile regression estimators.
 #'
@@ -86,6 +220,10 @@ linear.quacc <- function(x, y, S, suffStat) {
   tau <- readRDS("tau.rds")
   data <- suffStat
 
+  complete.columns <- c(x, y, S)
+  complete_cases_indices <- complete.cases(data[, complete.columns])
+  data <- data[complete_cases_indices, ]
+
   n <- length(data[,1])
   data.train <- data[1:(n%/%2), ] # Split in half train, half test
   data.test <- data[(1 + (n%/%2)):n, ]
@@ -126,6 +264,8 @@ linear.quacc <- function(x, y, S, suffStat) {
     c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
     quacc <- c.below - tau^2
 
+    var.term <- tau^2 * (1 - tau^2)
+
     filt.indices.var1 <- which(var2.test < fit.q2)
     filt.indices.var2 <- which(var1.test < fit.q1)
 
@@ -135,6 +275,8 @@ linear.quacc <- function(x, y, S, suffStat) {
   else{
     c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
     quacc <- c.above - (1 - tau)^2
+
+    var.term <- (1 - tau)^2 * (1 - (1 - tau)^2)
 
     filt.indices.var1 <- which(var2.test > fit.q2)
     filt.indices.var2 <- which(var1.test > fit.q1)
@@ -148,8 +290,8 @@ linear.quacc <- function(x, y, S, suffStat) {
   padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
 
   # Density estimations
-  A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1)))
-  B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2)))
+  A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1)))
+  B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
 
   # Compute variance terms in QuACC
   kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
@@ -158,7 +300,8 @@ linear.quacc <- function(x, y, S, suffStat) {
   # Compute QuACC
   sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
   sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
-  quacc <- quacc / sqrt( ((tau^2 * (1 - tau)^2) / n.test + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) )
+
+  quacc <- quacc / sqrt( (var.term / n.test) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] )
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)

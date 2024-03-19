@@ -10,10 +10,9 @@
 #' @param vertex.color Specify the color of nodes in the graph
 #' @return Nothing
 qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
-                   vertex.size=50, vertex.color="lightblue",...){
+                   vertex.size=30, vertex.color="lightblue",...){
 
   g <- igraph::graph_from_graphnel(as(g, "graphNEL"))
-  g <- igraph::as.undirected(g, mode="collapse")
   op <- par(mar=c(1,1,1,1))
 
   if (weights == TRUE){
@@ -53,20 +52,8 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, quac
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
 
-  saveRDS(tau, "tau.rds")
   #data <- jitter.columns(data, factor=0.1)
-  if(quacc) {
-    pc_graph <- pcalg::pc(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE)
-  }
-  else {
-    if(correl) {
-      suffStat <- list(C = cor(data), n = nrow(data))
-      pc_graph <- pcalg::pc(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
-    }
-    else{
-      pc_graph <- pcalg::pc(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
-    }
-  }
+  pc_graph <- calculate.skeleton(data, tau, quacc, correl, verbose, adj_vector=FALSE)
 
   n <- length((colnames(data)))
   lookup_table <- matrix(0, nrow=n, ncol=n)
@@ -81,17 +68,20 @@ plot.quantile.dag <- function(data, tau, weights="marginal", verbose=FALSE, quac
   data_var = pc_graph@graph@edgeData@data
   edgenames = names(data_var)
 
-  for(i in 1:length(edgenames)) {
-    curredge = edgenames[i]
-    varnames = strsplit(curredge, split="|", fixed=TRUE)
-    weightval = lookup_table[ varnames[[1]][1], varnames[[1]][2] ]
-    data_var[[ curredge ]]$weight = weightval
+  if(is.null(edgenames)) {
+    qgm.igraph.plot(pc_graph@graph, weights=FALSE)
   }
+  else {
+    for(i in 1:length(edgenames)) {
+      curredge = edgenames[i]
+      varnames = strsplit(curredge, split="|", fixed=TRUE)
+      weightval = lookup_table[ varnames[[1]][1], varnames[[1]][2] ]
+      data_var[[ curredge ]]$weight = weightval
+    }
 
-  pc_graph@graph@edgeData@data = data_var
-  unlink("tau.rds")
-
-  qgm.igraph.plot(pc_graph@graph, weights=use.weights)
+    pc_graph@graph@edgeData@data = data_var
+    qgm.igraph.plot(pc_graph@graph, weights=use.weights)
+  }
 }
 
 
@@ -125,8 +115,8 @@ plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE) {
 
   data <- expand.grid(X=colnames(df), Y=colnames(df))
   data$P <- as.vector(table.data)
-  ggplot2::ggplot(data, aes(X, Y, fill=P)) +
+  ggplot2::ggplot(data, ggplot2::aes(X, Y, fill=P)) +
     ggplot2::geom_tile() +
     ggplot2::scale_fill_gradient(low="white", high="blue") +
-    ggplot2::geom_text(aes(label=round(P, digits=3)))
+    ggplot2::geom_text(ggplot2::aes(label=round(P, digits=3)))
 }
