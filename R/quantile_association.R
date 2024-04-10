@@ -26,10 +26,21 @@ jitter.columns <- function(data, factor=0.1) {
 #' @param recall Recall of edge presence
 #' @param hamming Hamming distance between the two
 #' @return One of the three similarity metrics above
-adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE, hamming=FALSE) {
+adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE, hamming=FALSE, undirected=TRUE) {
   if(length(actual) != length(predicted)) {
     return("Vectors need to be of same length")
   }
+
+  if(undirected) { # Don't double count edges
+    actual.mat <- matrix(actual, nrow = sqrt(length(actual)), ncol = sqrt(length(actual)))
+    actual <- actual.mat[upper.tri(actual.mat, diag = FALSE)]
+
+    pred.mat <- matrix(predicted, nrow = sqrt(length(predicted)), ncol = sqrt(length(predicted)))
+    predicted <- pred.mat[upper.tri(pred.mat, diag = FALSE)]
+  }
+
+  print(sum(actual))
+
   if(precision) {
     if(sum(predicted) == 0) {
       return('Divide by 0 error')
@@ -47,6 +58,8 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
     res <- mean(actual != predicted)
   }
 
+
+
   return(res)
 }
 
@@ -59,18 +72,18 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
 #' @param verbose Print verbose independence tests results
 #' @param adj_vector Return vector form of adjacency matrix
 #' @return Graph or adjacency vector of underlying relationships
-calculate.skeleton <- function(data, tau, quacc=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
+calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
   saveRDS(tau, "tau.rds")
   if(quacc) {
-    pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE)
+    pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
   }
   else {
     if(correl) {
       suffStat <- list(C = cor(data), n = nrow(data))
-      pc_graph <- pcalg::skeleton(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+      pc_graph <- pcalg::skeleton(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose, m.max=m.max)
     }
     else{
-      pc_graph <- pcalg::skeleton(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose)
+      pc_graph <- pcalg::skeleton(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose, m.max=m.max)
     }
   }
   unlink("tau.rds")
@@ -380,13 +393,13 @@ orig.quantile.ztest <- function (x, y, S, suffStat) {
 #' considers the conditional case where each quantile regression is conditional w.r.t
 #' all other variables in the dataframe.
 #'
-#' @param data Input dataframe of data
+#' @param df Input dataframe of data
 #' @param tau A particular quantile level (0 to 1, not inclusive)
 #' @param type If weights of the regression should be marginal or conditional on all other variables
 #' @param quacc If you should use the linear QuACC or use the standard non train test split statistic
 #' @return An n by n matrix (where n is the number of columns in data) that contains
 #' the marginal relationships of each pair of columns
-pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
+pairwise.test <- function(df, tau, weights="marginal", quacc=TRUE) {
   num_cols <- length((colnames(data)))
 
   zstat_above <- matrix(0, nrow=num_cols, ncol=num_cols)
@@ -395,6 +408,8 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
   for(x in 1:num_cols) {
     for(y in 1:x) {
 
+      complete_cases_indices <- complete.cases(df[, c(x, y)])
+      data <- df[complete_cases_indices, ]
       n <- length(data[,x])
 
       if(quacc) {
@@ -419,6 +434,10 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
         else {
           S <- 1:num_cols
           S <- S[-c(x, y)]
+
+          complete.columns <- c(x, y, S)
+          complete_cases_indices <- complete.cases(data[, complete.columns])
+          data <- data[complete_cases_indices, ]
 
           q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
                                               paste(colnames(data)[S], collapse = "+"), sep = "")),
