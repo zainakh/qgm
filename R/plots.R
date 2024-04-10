@@ -47,7 +47,7 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param quacc If you want to calculate the linear QuACC statistic versus the general no train/test statistic
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=FALSE, correl=FALSE) {
+plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=TRUE, correl=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }

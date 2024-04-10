@@ -192,7 +192,7 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
 }
 
 
-#' Tests QuACC given linear quantile regression estimators.
+#' Tests QuACC given linear quantile regression estimators and returns a p-value.
 #'
 #' @param x Index of a column
 #' @param y Index of a column (not equal to x)
