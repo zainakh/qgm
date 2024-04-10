@@ -110,7 +110,7 @@ plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE) {
     table.data <- cor(df)
   }
   else{
-    table.data <- pairwise.test(df, tau, weights, quacc)
+    table.data <- pairwise.test(df, tau=tau, weights=weights, quacc=quacc)
   }
 
   data <- expand.grid(X=colnames(df), Y=colnames(df))
