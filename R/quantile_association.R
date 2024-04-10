@@ -399,7 +399,7 @@ orig.quantile.ztest <- function (x, y, S, suffStat) {
 #' @param quacc If you should use the linear QuACC or use the standard non train test split statistic
 #' @return An n by n matrix (where n is the number of columns in data) that contains
 #' the marginal relationships of each pair of columns
-pairwise.test <- function(df, tau, weights="marginal", quacc=TRUE) {
+pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
   num_cols <- length((colnames(data)))
 
   zstat_above <- matrix(0, nrow=num_cols, ncol=num_cols)
@@ -408,8 +408,6 @@ pairwise.test <- function(df, tau, weights="marginal", quacc=TRUE) {
   for(x in 1:num_cols) {
     for(y in 1:x) {
 
-      complete_cases_indices <- complete.cases(df[, c(x, y)])
-      data <- df[complete_cases_indices, ]
       n <- length(data[,x])
 
       if(quacc) {
@@ -434,10 +432,6 @@ pairwise.test <- function(df, tau, weights="marginal", quacc=TRUE) {
         else {
           S <- 1:num_cols
           S <- S[-c(x, y)]
-
-          complete.columns <- c(x, y, S)
-          complete_cases_indices <- complete.cases(data[, complete.columns])
-          data <- data[complete_cases_indices, ]
 
           q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
                                               paste(colnames(data)[S], collapse = "+"), sep = "")),
@@ -465,8 +459,8 @@ pairwise.test <- function(df, tau, weights="marginal", quacc=TRUE) {
         s2 <- summary(q2, cov=TRUE, se='nid')
 
         # Density estimations
-        A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test))) # Assume independence between 2 for now
-        B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test))) # Assume independence between 2 for now
+        A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test)))
+        B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test)))
 
         # CDF estimations
         F.ecdf <- ecdf(var1.test)
