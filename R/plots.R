@@ -94,7 +94,7 @@ plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=
 #' This function uses calculations from the quantile concordance statistic
 #' in pairwise.test and plots it in a nicer table format.
 #'
-#' If weights is equal to "cor" the pariwise Pearson correlation table is
+#' If weights is equal to "cor" the pairwise Pearson correlation table is
 #' returned.
 #'
 #' @param data A data frame of data with unique column/rownames

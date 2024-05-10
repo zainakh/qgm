@@ -357,91 +357,97 @@ linear.quacc <- function(x, y, S, suffStat) {
     return(f)
   }
 
+  singular.quacc <- function(x, y, S, tau, data, train.indices) {
+    data.train <- data[train.indices, ]
+    data.test <- data[-train.indices, ]
+    n.test <- length(data.test[,1])
+    var1.test <- data.test[, x]
+    var2.test <- data.test[, y]
+
+    if(length(S) == 0){
+      q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                         data.train,
+                         tau=tau)
+
+      q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                         data.train,
+                         tau=tau)
+    }
+    else {
+      q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                          paste(colnames(data)[S], collapse = "+"), sep = "")),
+                         data.train,
+                         tau=tau)
+
+      q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                          paste(colnames(data)[S], collapse = "+"), sep = "")),
+                         data.train,
+                         tau=tau)
+    }
+
+    fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+    fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+    # CDF estimations
+    F.ecdf <- ecdf(var1.test)
+    G.ecdf <- ecdf(var2.test)
+
+    # Calculate QuACC and normalize
+    if(tau < 0.5) {
+      c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+      quacc <- c.below - tau^2
+
+      var.term <- tau^2 * (1 - tau^2)
+
+      filt.indices.var1 <- which(var2.test < fit.q2)
+      filt.indices.var2 <- which(var1.test < fit.q1)
+
+      C <- as.matrix(F.ecdf(fit.q1))
+      D <- as.matrix(G.ecdf(fit.q2))
+    }
+    else{
+      c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+      quacc <- c.above - (1 - tau)^2
+
+      var.term <- (1 - tau)^2 * (1 - (1 - tau)^2)
+
+      filt.indices.var1 <- which(var2.test > fit.q2)
+      filt.indices.var2 <- which(var1.test > fit.q1)
+
+      C <- 1 - as.matrix(F.ecdf(fit.q1))
+      D <- 1 - as.matrix(G.ecdf(fit.q2))
+    }
+
+    s1 <- summary(q1, cov=TRUE, se='nid')
+    s2 <- summary(q2, cov=TRUE, se='nid')
+    padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
+
+    # Density estimations
+    A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1)))
+    B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
+
+    # Compute variance terms in QuACC
+    kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
+    kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+
+    # Compute QuACC
+    sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
+    sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
+
+    quacc <- quacc / sqrt( (var.term / n.test) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] )
+    return(quacc)
+  }
+
   tau <- readRDS("tau.rds")
   data <- suffStat
-
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
-
   n <- length(data[,1])
-  data.train <- data[1:(n%/%2), ] # Split in half train, half test
-  data.test <- data[(1 + (n%/%2)):n, ]
-  n.test <- length(data.test[,1])
-  var1.test <- data.test[, x]
-  var2.test <- data.test[, y]
 
-  if(length(S) == 0){
-    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
-                       data.train,
-                       tau=tau)
-
-    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
-                       data.train,
-                       tau=tau)
-  }
-  else {
-    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
-                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
-                       data.train,
-                       tau=tau)
-
-    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
-                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
-                       data.train,
-                       tau=tau)
-  }
-
-  fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
-  fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
-
-  # CDF estimations
-  F.ecdf <- ecdf(var1.test)
-  G.ecdf <- ecdf(var2.test)
-
-  # Calculate QuACC and normalize
-  if(tau < 0.5) {
-    c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
-    quacc <- c.below - tau^2
-
-    var.term <- tau^2 * (1 - tau^2)
-
-    filt.indices.var1 <- which(var2.test < fit.q2)
-    filt.indices.var2 <- which(var1.test < fit.q1)
-
-    C <- as.matrix(F.ecdf(fit.q1))
-    D <- as.matrix(G.ecdf(fit.q2))
-  }
-  else{
-    c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
-    quacc <- c.above - (1 - tau)^2
-
-    var.term <- (1 - tau)^2 * (1 - (1 - tau)^2)
-
-    filt.indices.var1 <- which(var2.test > fit.q2)
-    filt.indices.var2 <- which(var1.test > fit.q1)
-
-    C <- 1 - as.matrix(F.ecdf(fit.q1))
-    D <- 1 - as.matrix(G.ecdf(fit.q2))
-  }
-
-  s1 <- summary(q1, cov=TRUE, se='nid')
-  s2 <- summary(q2, cov=TRUE, se='nid')
-  padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
-
-  # Density estimations
-  A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1)))
-  B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
-
-  # Compute variance terms in QuACC
-  kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
-  kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
-
-  # Compute QuACC
-  sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
-  sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
-
-  quacc <- quacc / sqrt( (var.term / n.test) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] )
+  quacc.first <- singular.quacc(x, y, S, tau, data, train.indices=1:(n%/%2))
+  quacc.second <- singular.quacc(x, y, S, tau, data, train.indices=(1 + (n%/%2)):n)
+  quacc <- 1/2 * (quacc.first + quacc.second)
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
