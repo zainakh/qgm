@@ -561,7 +561,7 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
         else {
           S <- 1:num_cols
           S <- S[-c(x, y)]
-          first <- general.linear.quacc(x=x, y=y, S=S data=data, tau=tau, train.indices=1:(n%/%2))
+          first <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau, train.indices=1:(n%/%2))
           second <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau, train.indices=(1 + (n%/%2)):n)
           quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
