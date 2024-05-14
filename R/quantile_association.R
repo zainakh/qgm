@@ -554,17 +554,21 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
       if(quacc) {
         if(weights == "marginal"){
           S <- c()
-          first <- general.linear.quacc(x=x, y=y, S=c(), data=data, tau=tau, train.indices=1:(n%/%2))
-          second <- general.linear.quacc(x=x, y=y, S=c(), data=data, tau=tau, train.indices=(1 + (n%/%2)):n)
-          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
         else {
           S <- 1:num_cols
           S <- S[-c(x, y)]
-          first <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau, train.indices=1:(n%/%2))
-          second <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau, train.indices=(1 + (n%/%2)):n)
-          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
+
+        data.subset <- data
+        complete.columns <- c(x, y, S)
+        complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+        data.subset <- data.subset[complete_cases_indices, ]
+        n <- length(data.subset[,1])
+
+        first <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
+        second <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+        quacc.table[x, y] <- 1/sqrt(2) * (first + second)
 
       }
       else { # Don't use QuACC
