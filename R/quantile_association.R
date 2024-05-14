@@ -130,65 +130,78 @@ koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
 #' @return pvalue corresponding to if the quantile level
 linear.quacc.rho <- function(x, y, S, suffStat) {
 
+  quacc.rho.half <- function(x, y, S, tau, data, train.indices=1:(n%/%2)) {
+
+    data.train <- data[train.indices, ]
+    data.test <- data[-train.indices, ]
+    n.test <- length(data.test[,1])
+    var1.test <- data.test[, x]
+    var2.test <- data.test[, y]
+
+    if(length(S) == 0){
+      q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                         data.train,
+                         tau=tau)
+
+      q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                         data.train,
+                         tau=tau)
+    }
+    else {
+      q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                          paste(colnames(data)[S], collapse = "+"), sep = "")),
+                         data.train,
+                         tau=tau)
+
+      q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                          paste(colnames(data)[S], collapse = "+"), sep = "")),
+                         data.train,
+                         tau=tau)
+    }
+
+    fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+    fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+
+    # Calculate QuACC and normalize
+    if(tau <= 0.5) {
+      c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+      quacc <- c.below - tau^2
+
+      if(quacc > 0) {
+        quacc <- quacc / (tau - tau^2)
+      }
+      else{
+        quacc <- quacc / tau^2
+      }
+    }
+    else{
+      c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+      quacc <- c.above - (1 - tau)^2
+      if(quacc > 0) {
+        quacc <- quacc / ((1 - tau) - (1 - tau)^2)
+      }
+      else{
+        quacc <- quacc / ((1 - tau)^2)
+      }
+    }
+
+    return(quacc)
+  }
+
   tau <- readRDS("tau.rds")
   data <- suffStat
-
+  complete.columns <- c(x, y, S)
+  complete_cases_indices <- complete.cases(data[, complete.columns])
+  data <- data[complete_cases_indices, ]
   n <- length(data[,1])
-  data.train <- data[1:(n%/%2), ]
-  data.test <- data[(1 + (n%/%2)):n, ]
-  n.test <- length(data.test[,1])
-  var1.test <- data.test[, x]
-  var2.test <- data.test[, y]
 
-  if(length(S) == 0){
-    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
-                       data.train,
-                       tau=tau)
-
-    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
-                       data.train,
-                       tau=tau)
-  }
-  else {
-    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
-                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
-                       data.train,
-                       tau=tau)
-
-    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
-                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
-                       data.train,
-                       tau=tau)
-  }
-
-  fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
-  fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
-
-
-  # Calculate QuACC and normalize
-  if(tau <= 0.5) {
-    c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
-    quacc <- c.below - tau^2
-
-    if(quacc > 0) {
-      quacc <- quacc / (tau - tau^2)
-    }
-    else{
-      quacc <- quacc / tau^2
-    }
-  }
-  else{
-    c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
-    quacc <- c.above - (1 - tau)^2
-    if(quacc > 0) {
-      quacc <- quacc / ((1 - tau) - (1 - tau)^2)
-    }
-    else{
-      quacc <- quacc / ((1 - tau)^2)
-    }
-  }
+  quacc.first <- quacc.rho.half(x, y, S, tau, data, train.indices=1:(n%/%2))
+  quacc.second <- quacc.rho.half(x, y, S, tau, data, train.indices=(1 + (n%/%2)):n)
+  quacc <- 1/sqrt(2) * (quacc.first + quacc.second)
 
   return(quacc)
+
 }
 
 
@@ -447,11 +460,11 @@ linear.quacc <- function(x, y, S, suffStat) {
 
   quacc.first <- singular.quacc(x, y, S, tau, data, train.indices=1:(n%/%2))
   quacc.second <- singular.quacc(x, y, S, tau, data, train.indices=(1 + (n%/%2)):n)
-  quacc <- 1/2 * (quacc.first + quacc.second)
+  quacc <- 1/sqrt(2) * (quacc.first + quacc.second)
 
   # Calculate p-value of QuACC
-  p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(p_val)
+  #p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
+  return(quacc)
 }
 
 
