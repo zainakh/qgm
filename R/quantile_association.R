@@ -215,7 +215,7 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
 #' @param data The dataframe of data (there is no sufficient statistic for this calculation)
 #' @param tau The quantile level of interest
 #' @return pvalue corresponding to if the quantile level
-general.linear.quacc <- function(x, y, S, data, tau) {
+general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
 
   koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
     # Get constants
@@ -251,8 +251,8 @@ general.linear.quacc <- function(x, y, S, data, tau) {
   data <- data[complete_cases_indices, ]
 
   n <- length(data[,1])
-  data.train <- data[1:(n%/%2), ] # Split in half train, half test
-  data.test <- data[(1 + (n%/%2)):n, ]
+  data.train <- data[train.indices, ]
+  data.test <- data[-train.indices, ]
   n.test <- length(data.test[,1])
   var1.test <- data.test[, x]
   var2.test <- data.test[, y]
@@ -463,8 +463,8 @@ linear.quacc <- function(x, y, S, suffStat) {
   quacc <- 1/sqrt(2) * (quacc.first + quacc.second)
 
   # Calculate p-value of QuACC
-  #p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(quacc)
+  p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
+  return(p_val)
 }
 
 
@@ -553,12 +553,17 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
     for(y in 1:x) {
       if(quacc) {
         if(weights == "marginal"){
-          quacc.table[x, y] <- general.linear.quacc(x=x, y=y, S=c(), data=data, tau=tau)
+          S <- c()
+          first <- general.linear.quacc(x=x, y=y, S=c(), data=data, tau=tau, train.indices=1:(n%/%2))
+          second <- general.linear.quacc(x=x, y=y, S=c(), data=data, tau=tau, train.indices=(1 + (n%/%2)):n)
+          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
         else {
           S <- 1:num_cols
           S <- S[-c(x, y)]
-          quacc.table[x, y] <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau)
+          first <- general.linear.quacc(x=x, y=y, S=S data=data, tau=tau, train.indices=1:(n%/%2))
+          second <- general.linear.quacc(x=x, y=y, S=S, data=data, tau=tau, train.indices=(1 + (n%/%2)):n)
+          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
 
       }
