@@ -47,7 +47,7 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param quacc If you want to calculate the linear QuACC statistic versus the general no train/test statistic
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=TRUE, correl=FALSE) {
+plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=TRUE, correl=FALSE, rho=FALSE) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
@@ -59,7 +59,7 @@ plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=
   lookup_table <- matrix(0, nrow=n, ncol=n)
   use.weights <- tolower(weights) %in% c("conditional", "marginal")
   if(use.weights) {
-    lookup_table <- pairwise.test(data, tau=tau, weights=tolower(weights), quacc=quacc)
+    lookup_table <- pairwise.test(data, tau=tau, weights=tolower(weights), quacc=quacc, rho=rho)
   }
 
   colnames(lookup_table) <- colnames(data)
@@ -105,12 +105,12 @@ plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=
 #' @param quacc If you want to calculate the linear QuACC statistic versus the standard no train/test split statistic
 #' @return Nothing
 #' @examples plot.marginal.table(df, tau=0.5, weights="marginal")
-plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE) {
+plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE, rho=FALSE) {
   if (weights == "cor") {
     table.data <- cor(df)
   }
   else{
-    table.data <- pairwise.test(df, tau=tau, weights=weights, quacc=quacc)
+    table.data <- pairwise.test(df, tau=tau, weights=weights, quacc=quacc, rho=rho)
   }
 
   data <- expand.grid(X=colnames(df), Y=colnames(df))

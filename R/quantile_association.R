@@ -39,8 +39,6 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
     predicted <- pred.mat[upper.tri(pred.mat, diag = FALSE)]
   }
 
-  print(sum(actual))
-
   if(precision) {
     if(sum(predicted) == 0) {
       return('Divide by 0 error')
@@ -54,6 +52,7 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
     }
     res <- sum(actual & predicted) / sum(actual)
   }
+
   if(hamming) {
     res <- mean(actual != predicted)
   }
@@ -202,6 +201,107 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
 
   return(quacc)
 
+}
+
+#' General function for getting QuACC of dataset at particular tau level.
+#' Not to be used with PC algorithm.
+#'
+#' @param x Index of a column
+#' @param y Index of a column (not equal to x)
+#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
+#' @param data The dataframe of data (there is no sufficient statistic for this calculation)
+#' @param tau The quantile level of interest
+#' @return pvalue corresponding to if the quantile level
+general.linear.quacc.rho <- function(x, y, S, data, tau, train.indices) {
+
+  koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
+    # Get constants
+    eps <- .Machine$double.eps^(1/2)
+    tau <- rq.object$tau
+    n <- length(y)
+
+    # Check for valid h
+    h <- quantreg::bandwidth.rq(tau, n, hs = hs)
+    while((tau - h < 0) || (tau + h > 1)) h <- h/2
+
+    # Calculate Hendricks-Koenker sandwich
+    if(filter){ # Filter for y, the regressor
+
+      x.filt <- x[filt.indices, , drop = FALSE]
+      y.filt <- y[filt.indices]
+
+      bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h, method = rq.object$method)$coef
+      blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h, method = rq.object$method)$coef
+    }
+    else{ # Assume independence in density of var y and another variable that dictates filt.indices
+      bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
+      blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
+    }
+
+    dyhat <- as.matrix(x) %*% (bhi - blo)
+    f <- pmax(0, (2 * h)/(dyhat - eps))
+    return(f)
+  }
+
+  complete.columns <- c(x, y, S)
+  complete_cases_indices <- complete.cases(data[, complete.columns])
+  data <- data[complete_cases_indices, ]
+
+  n <- length(data[,1])
+  data.train <- data[train.indices, ]
+  data.test <- data[-train.indices, ]
+  n.test <- length(data.test[,1])
+  var1.test <- data.test[, x]
+  var2.test <- data.test[, y]
+
+  if(length(S) == 0){
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                       data.train,
+                       tau=tau)
+  }
+  else {
+    q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+
+    q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~",
+                                        paste(colnames(data)[S], collapse = "+"), sep = "")),
+                       data.train,
+                       tau=tau)
+  }
+
+  fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+  fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+
+  # Calculate QuACC and normalize
+  if(tau <= 0.5) {
+    c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+    quacc <- c.below - tau^2
+
+    if(quacc > 0) {
+      quacc <- quacc / (tau - tau^2)
+    }
+    else{
+      quacc <- quacc / tau^2
+    }
+  }
+  else{
+    c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+    quacc <- c.above - (1 - tau)^2
+    if(quacc > 0) {
+      quacc <- quacc / ((1 - tau) - (1 - tau)^2)
+    }
+    else{
+      quacc <- quacc / ((1 - tau)^2)
+    }
+  }
+
+  return(quacc)
 }
 
 
@@ -545,7 +645,7 @@ orig.quantile.ztest <- function (x, y, S, suffStat) {
 #' @param quacc If you should use the linear QuACC or use the standard non train test split statistic
 #' @return An n by n matrix (where n is the number of columns in data) that contains
 #' the marginal relationships of each pair of columns
-pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
+pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) {
   num_cols <- length((colnames(data)))
   quacc.table <- matrix(0, nrow=num_cols, ncol=num_cols)
 
@@ -570,8 +670,14 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE) {
         data.subset <- data.subset[complete_cases_indices, ]
         n <- length(data.subset[,1])
 
-        first <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
-        second <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+        if(rho) {
+          first <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
+          second <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+        }
+        else{
+          first <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
+          second <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+        }
         quacc.table[x, y] <- 1/sqrt(2) * (first + second)
 
       }
