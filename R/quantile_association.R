@@ -673,12 +673,13 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
         if(rho) {
           first <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
           second <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+          quacc.table[x, y] <- 1/2 * (first + second)
         }
         else{
           first <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
           second <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
+          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
         }
-        quacc.table[x, y] <- 1/sqrt(2) * (first + second)
 
       }
       else { # Don't use QuACC
