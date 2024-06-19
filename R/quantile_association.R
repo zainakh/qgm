@@ -220,39 +220,6 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
 #' @return pvalue corresponding to if the quantile level
 general.linear.quacc.rho <- function(x, y, S, data, tau, train.indices) {
 
-  koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
-    # Get constants
-    eps <- .Machine$double.eps^(1/2)
-    tau <- rq.object$tau
-    n <- length(y)
-
-    # Check for valid h
-    h <- quantreg::bandwidth.rq(tau, n, hs = hs)
-    while((tau - h < 0) || (tau + h > 1)) h <- h/2
-
-    # Calculate Hendricks-Koenker sandwich
-    if(filter){ # Filter for y, the regressor
-
-      x.filt <- x[filt.indices, , drop = FALSE]
-      y.filt <- y[filt.indices]
-
-      bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h, method = rq.object$method)$coef
-      blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h, method = rq.object$method)$coef
-    }
-    else{ # Assume independence in density of var y and another variable that dictates filt.indices
-      bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
-      blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
-    }
-
-    dyhat <- as.matrix(x) %*% (bhi - blo)
-    f <- pmax(0, (2 * h)/(dyhat - eps))
-    return(f)
-  }
-
-  complete.columns <- c(x, y, S)
-  complete_cases_indices <- complete.cases(data[, complete.columns])
-  data <- data[complete_cases_indices, ]
-
   n <- length(data[,1])
   data.train <- data[train.indices, ]
   data.test <- data[-train.indices, ]
@@ -322,10 +289,6 @@ general.linear.quacc.rho <- function(x, y, S, data, tau, train.indices) {
 #' @param tau The quantile level of interest
 #' @return pvalue corresponding to if the quantile level
 general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
-
-  complete.columns <- c(x, y, S)
-  complete_cases_indices <- complete.cases(data[, complete.columns])
-  data <- data[complete_cases_indices, ]
 
   n <- length(data[,1])
   data.train <- data[train.indices, ]
@@ -605,14 +568,14 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
 
         if(rho) {
           for(i in 1:k) {
-            fold.indices <- which(folds==i, arr.ind=TRUE)
+            fold.indices <- which(folds!=i, arr.ind=TRUE)
             quacc.vals[i] <- general.linear.quacc.rho(x, y, S, tau, data, train.indices=fold.indices)
           }
           quacc.table[x, y] <- mean(quacc.vals)
         }
         else{
           for(i in 1:k) {
-            fold.indices <- which(folds==i, arr.ind=TRUE)
+            fold.indices <- which(folds!=i, arr.ind=TRUE)
             fold.res <- general.linear.quacc(x, y, S, tau, data, train.indices=fold.indices)
             quacc.vals[i] <- fold.res[1]
             quacc.vars[i] <- fold.res[2]
