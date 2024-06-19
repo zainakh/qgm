@@ -543,75 +543,79 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
 
   for(x in 1:num_cols) {
     for(y in 1:x) {
-      if(quacc) {
 
-        data.subset <- data
-        if(weights == "marginal"){
-          S <- c()
-          complete.columns <- c(x, y)
-          complete_cases_indices <- complete.cases(data.subset[, complete.columns])
-        }
-        else {
-          S <- 1:num_cols
-          S <- S[-c(x, y)]
-          complete.columns <- c(x, y, S)
-          complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+      if(y != x) {
+        if(quacc) {
 
-        }
-
-        data.subset <- data.subset[complete_cases_indices, ]
-        n <- length(data.subset[,1])
-        k <- 5
-        quacc.vals <- rep(0, k)
-        quacc.vars <- rep(0, k)
-        folds <- cut(seq(1, nrow(data.subset)), breaks=k, labels=FALSE)
-
-        if(rho) {
-          for(i in 1:k) {
-            fold.indices <- which(folds!=i, arr.ind=TRUE)
-            quacc.vals[i] <- general.linear.quacc.rho(x, y, S, tau, data, train.indices=fold.indices)
+          data.subset <- data
+          if(weights == "marginal"){
+            S <- c()
+            complete.columns <- c(x, y)
+            complete_cases_indices <- complete.cases(data.subset[, complete.columns])
           }
-          quacc.table[x, y] <- mean(quacc.vals)
-        }
-        else{
-          for(i in 1:k) {
-            fold.indices <- which(folds!=i, arr.ind=TRUE)
-            fold.res <- general.linear.quacc(x, y, S, tau, data, train.indices=fold.indices)
-            quacc.vals[i] <- fold.res[1]
-            quacc.vars[i] <- fold.res[2]
+          else {
+            S <- 1:num_cols
+            S <- S[-c(x, y)]
+            complete.columns <- c(x, y, S)
+            complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+
           }
-          quacc.table[x, y] <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
-        }
 
+          data.subset <- data.subset[complete_cases_indices, ]
+          n <- length(data.subset[,1])
+          k <- 5
+          quacc.vals <- rep(0, k)
+          quacc.vars <- rep(0, k)
+          folds <- cut(seq(1, nrow(data.subset)), breaks=k, labels=FALSE)
+
+          if(rho) {
+            for(i in 1:k) {
+              fold.indices <- which(folds!=i, arr.ind=TRUE)
+              quacc.vals[i] <- general.linear.quacc.rho(x, y, S, tau, data, train.indices=fold.indices)
+            }
+            quacc.table[x, y] <- mean(quacc.vals)
+          }
+          else{
+            for(i in 1:k) {
+              fold.indices <- which(folds!=i, arr.ind=TRUE)
+              fold.res <- general.linear.quacc(x, y, S, tau, data, train.indices=fold.indices)
+              quacc.vals[i] <- fold.res[1]
+              quacc.vars[i] <- fold.res[2]
+            }
+            quacc.table[x, y] <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
+          }
+
+        }
+        else { # Don't use QuACC
+          var1 <- data[,x]
+          var2 <- data[,y]
+
+          if(weights == "marginal") {
+            q1 <- quantreg::rq(var1 ~ 1, tau=tau)
+            q2 <- quantreg::rq(var2 ~ 1, tau=tau)
+          }
+          else {
+            col1 <- colnames(data)[x]
+            col2 <- colnames(data)[y]
+            q1 <- quantreg::rq(as.formula(paste0(col1, " ~ .")), tau=tau, data=data)
+            q2 <- quantreg::rq(as.formula(paste0(col2, " ~ .")), tau=tau, data=data)
+          }
+
+          fit.q1 <- fitted(q1)
+          fit.q2 <- fitted(q2)
+
+          ptilde <- sum((var1 < fit.q1) & (var2 < fit.q2)) / n
+          phat <- sum((var1 > fit.q1) & (var2 > fit.q2)) / n
+
+          if(tau < 0.5) {
+            quacc.table[x, y] <- (ptilde - tau^2) / sqrt( tau^2 * (1-tau)^2 / n)
+          }
+          else{
+            quacc.table[x, y] <- (phat - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / n)
+          }
+        }
       }
-      else { # Don't use QuACC
-        var1 <- data[,x]
-        var2 <- data[,y]
 
-        if(weights == "marginal") {
-          q1 <- quantreg::rq(var1 ~ 1, tau=tau)
-          q2 <- quantreg::rq(var2 ~ 1, tau=tau)
-        }
-        else {
-          col1 <- colnames(data)[x]
-          col2 <- colnames(data)[y]
-          q1 <- quantreg::rq(as.formula(paste0(col1, " ~ .")), tau=tau, data=data)
-          q2 <- quantreg::rq(as.formula(paste0(col2, " ~ .")), tau=tau, data=data)
-        }
-
-        fit.q1 <- fitted(q1)
-        fit.q2 <- fitted(q2)
-
-        ptilde <- sum((var1 < fit.q1) & (var2 < fit.q2)) / n
-        phat <- sum((var1 > fit.q1) & (var2 > fit.q2)) / n
-
-        if(tau < 0.5) {
-          quacc.table[x, y] <- (ptilde - tau^2) / sqrt( tau^2 * (1-tau)^2 / n)
-        }
-        else{
-          quacc.table[x, y] <- (phat - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / n)
-        }
-      }
     }
   }
 
