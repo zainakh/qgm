@@ -568,14 +568,14 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
           if(rho) {
             for(i in 1:k) {
               fold.indices <- which(folds!=i, arr.ind=TRUE)
-              quacc.vals[i] <- general.linear.quacc.rho(x, y, S, tau, data.subset, train.indices=fold.indices)
+              quacc.vals[i] <- general.linear.quacc.rho(x=x, y=y, S=S, tau=tau, data=data.subset, train.indices=fold.indices)
             }
             quacc.table[x, y] <- mean(quacc.vals)
           }
           else{
             for(i in 1:k) {
               fold.indices <- which(folds!=i, arr.ind=TRUE)
-              fold.res <- general.linear.quacc(x, y, S, tau, data.subset, train.indices=fold.indices)
+              fold.res <- general.linear.quacc(x=x, y=y, S=S, tau=tau, data=data.subset, train.indices=fold.indices)
               quacc.vals[i] <- fold.res[1]
               quacc.vars[i] <- fold.res[2]
             }
