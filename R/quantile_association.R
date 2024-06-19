@@ -551,7 +551,7 @@ linear.quacc <- function(x, y, S, suffStat) {
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(quacc)
+  return(p_val)
 }
 
 
