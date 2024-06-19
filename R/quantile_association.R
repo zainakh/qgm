@@ -551,15 +551,17 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
             S <- c()
             complete.columns <- c(x, y)
             complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+            data.subset <- data.subset[complete_cases_indices, ]
           }
           else {
             S <- 1:num_cols
             S <- S[-c(x, y)]
             complete.columns <- c(x, y, S)
             complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+            data.subset <- data.subset[complete_cases_indices, ]
           }
 
-          data.subset <- data.subset[complete_cases_indices, ]
+
           n <- length(data.subset[,1])
           k <- 5
           quacc.vals <- rep(0, k)
