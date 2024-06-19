@@ -550,6 +550,7 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
           if(weights == "marginal"){
             S <- c()
             complete.columns <- c(x, y)
+            complete_cases_indices <- complete.cases(data.subset[, complete.columns])
           }
           else {
             S <- 1:num_cols
