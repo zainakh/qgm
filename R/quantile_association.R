@@ -129,7 +129,7 @@ koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
 #' @return pvalue corresponding to if the quantile level
 linear.quacc.rho <- function(x, y, S, suffStat) {
 
-  quacc.rho.half <- function(x, y, S, tau, data, train.indices=1:(n%/%2)) {
+  quacc.rho.singular <- function(x, y, S, tau, data, train.indices=1:(n%/%2)) {
 
     data.train <- data[train.indices, ]
     data.test <- data[-train.indices, ]
@@ -189,16 +189,22 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
   }
 
   tau <- readRDS("tau.rds")
+  k <- 5
+  quacc.vals <- rep(0, k)
+
   data <- suffStat
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
+  data <- data[sample(nrow(data)),] # Randomly shuffle
   n <- length(data[,1])
+  folds <- cut(seq(1, nrow(data)), breaks=k, labels=FALSE)
 
-  quacc.first <- quacc.rho.half(x, y, S, tau, data, train.indices=1:(n%/%2))
-  quacc.second <- quacc.rho.half(x, y, S, tau, data, train.indices=(1 + (n%/%2)):n)
-  quacc <- 1/sqrt(2) * (quacc.first + quacc.second)
-
+  for(i in 1:k) {
+    fold.indices <- which(folds==i, arr.ind=TRUE)
+    quacc.vals[i] <- quacc.rho.singular(x, y, S, tau, data, train.indices=fold.indices)
+  }
+  quacc <- mean(quacc.vals)
   return(quacc)
 
 }
@@ -317,35 +323,6 @@ general.linear.quacc.rho <- function(x, y, S, data, tau, train.indices) {
 #' @return pvalue corresponding to if the quantile level
 general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
 
-  koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
-    # Get constants
-    eps <- .Machine$double.eps^(1/2)
-    tau <- rq.object$tau
-    n <- length(y)
-
-    # Check for valid h
-    h <- quantreg::bandwidth.rq(tau, n, hs = hs)
-    while((tau - h < 0) || (tau + h > 1)) h <- h/2
-
-    # Calculate Hendricks-Koenker sandwich
-    if(filter){ # Filter for y, the regressor
-
-      x.filt <- x[filt.indices, , drop = FALSE]
-      y.filt <- y[filt.indices]
-
-      bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h, method = rq.object$method)$coef
-      blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h, method = rq.object$method)$coef
-    }
-    else{ # Assume independence in density of var y and another variable that dictates filt.indices
-      bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
-      blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
-    }
-
-    dyhat <- as.matrix(x) %*% (bhi - blo)
-    f <- pmax(0, (2 * h)/(dyhat - eps))
-    return(f)
-  }
-
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
@@ -386,11 +363,11 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
   G.ecdf <- ecdf(var2.test)
 
   # Calculate QuACC and normalize
-  if(tau < 0.5) {
+  if(tau <= 0.5) {
     c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
     quacc <- c.below - tau^2
 
-    var.term <- tau^2 * (1 - tau^2)
+    var.term <- tau^2 * (1 - tau)^2
 
     filt.indices.var1 <- which(var2.test < fit.q2)
     filt.indices.var2 <- which(var1.test < fit.q1)
@@ -402,7 +379,7 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
     c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
     quacc <- c.above - (1 - tau)^2
 
-    var.term <- (1 - tau)^2 * (1 - (1 - tau)^2)
+    var.term <- (1 - tau)^2 * (1 - (1 - tau))^2
 
     filt.indices.var1 <- which(var2.test > fit.q2)
     filt.indices.var2 <- which(var1.test > fit.q1)
@@ -427,8 +404,8 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
   sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
   sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
 
-  quacc <- quacc / sqrt( (var.term / n.test) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] )
-  return(quacc)
+  quacc.var <- ( (var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] ) / (n.test)
+  return(c(quacc, quacc.var))
 }
 
 
@@ -510,7 +487,7 @@ linear.quacc <- function(x, y, S, suffStat) {
       c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
       quacc <- c.below - tau^2
 
-      var.term <- tau^2 * (1 - tau^2)
+      var.term <- tau^2 * (1 - tau)^2
 
       filt.indices.var1 <- which(var2.test < fit.q2)
       filt.indices.var2 <- which(var1.test < fit.q1)
@@ -522,7 +499,7 @@ linear.quacc <- function(x, y, S, suffStat) {
       c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
       quacc <- c.above - (1 - tau)^2
 
-      var.term <- (1 - tau)^2 * (1 - (1 - tau)^2)
+      var.term <- (1 - tau)^2 * (1 - (1 - tau))^2
 
       filt.indices.var1 <- which(var2.test > fit.q2)
       filt.indices.var2 <- which(var1.test > fit.q1)
@@ -547,84 +524,36 @@ linear.quacc <- function(x, y, S, suffStat) {
     sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
     sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
 
-    quacc <- quacc / sqrt( (var.term / n.test) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1] )
-    return(quacc)
+    quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
+    return(c(quacc, quacc.var))
   }
 
   tau <- readRDS("tau.rds")
+  k <- 5
+  quacc.vals <- rep(0, k)
+  quacc.vars <- rep(0, k)
+
   data <- suffStat
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
+  data <- data[sample(nrow(data)),] # Randomly shuffle
   n <- length(data[,1])
+  folds <- cut(seq(1, nrow(data)), breaks=k, labels=FALSE)
 
-  quacc.first <- singular.quacc(x, y, S, tau, data, train.indices=1:(n%/%2))
-  quacc.second <- singular.quacc(x, y, S, tau, data, train.indices=(1 + (n%/%2)):n)
-  quacc <- 1/sqrt(2) * (quacc.first + quacc.second)
+  for(i in 1:k) {
+    fold.indices <- which(folds!=i, arr.ind=TRUE) # Train on all but kth fold, evaluate on fold
+    fold.res <- singular.quacc(x, y, S, tau, data, train.indices=fold.indices)
+    quacc.vals[i] <- fold.res[1]
+    quacc.vars[i] <- fold.res[2]
+  }
+  quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(p_val)
+  return(quacc)
 }
 
-
-#' Performs a hypothesis test of two variables given a conditioning set and returns
-#' a p-value on if they are independent (p > 0.05) or not (p <= 0.05).
-#'
-#' Uses a hypothesis test that considers the proportion of times two variables
-#' have concordant (conditional) quantile regression residuals. Counts the
-#' amount of times the residual pairs are concordant (jointly above or below their
-#' respective conditional quantile regression lines) and normalizes that concordant
-#' proportion. Normalization is based on what the proportions would be
-#' under the null hypothesis. From the normalized variable, p values of the
-#' relationship between columns x and y can be returned.
-#'
-#'
-#' @param x Index of a column
-#' @param y Index of a column (not equal to x)
-#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
-#' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
-#' @return pvalue corresponding to if the quantile level
-orig.quantile.ztest <- function (x, y, S, suffStat) {
-  tau <- readRDS("tau.rds")
-  n <- length(suffStat[,x])
-
-  var1 <- suffStat[,x]
-  var2 <- suffStat[,y]
-
-  if(length(S) == 0){
-    q1 <- quantreg::rq(var1 ~ 1, tau=tau)
-    q2 <- quantreg::rq(var2 ~ 1, tau=tau)
-
-    fit.q1 <- fitted(q1)
-    fit.q2 <- fitted(q2)
-  }
-  else {
-    Z <- sapply(suffStat[,S], as.numeric)
-
-    q1 <- quantreg::rq(var1 ~ Z, tau=tau)
-    q2 <- quantreg::rq(var2 ~ Z, tau=tau)
-
-    fit.q1 <- fitted(q1)
-    fit.q2 <- fitted(q2)
-  }
-
-  ptilde <- sum((var1 < fit.q1) & (var2 < fit.q2)) / n
-  phat <- sum((var1 > fit.q1) & (var2 > fit.q2)) / n
-
-  zstat_below <- (ptilde - tau^2) / sqrt( tau^2 * (1-tau)^2 / n)
-  zstat_above <- (phat - (1 - tau)^2) / sqrt( tau^2 * (1-tau)^2 / n)
-
-  p_val_below <- 2 * pnorm(abs(zstat_below), lower.tail = FALSE)
-  p_val_above <- 2 * pnorm(abs(zstat_above), lower.tail = FALSE)
-
-  if (tau < 0.5) {
-    return(p_val_below)
-  }
-  else {
-    return(p_val_above)
-  }
-}
 
 
 #' Performs a hypothesis test of two variables given a conditioning set and returns
@@ -669,16 +598,26 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
 
         data.subset <- data.subset[complete_cases_indices, ]
         n <- length(data.subset[,1])
+        k <- 5
+        quacc.vals <- rep(0, k)
+        quacc.vars <- rep(0, k)
+        folds <- cut(seq(1, nrow(data.subset)), breaks=k, labels=FALSE)
 
         if(rho) {
-          first <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
-          second <- general.linear.quacc.rho(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
-          quacc.table[x, y] <- 1/2 * (first + second)
+          for(i in 1:k) {
+            fold.indices <- which(folds==i, arr.ind=TRUE)
+            quacc.vals[i] <- general.linear.quacc.rho(x, y, S, tau, data, train.indices=fold.indices)
+          }
+          quacc.table[x, y] <- mean(quacc.vals)
         }
         else{
-          first <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=1:(n%/%2))
-          second <- general.linear.quacc(x=x, y=y, S=S, data=data.subset, tau=tau, train.indices=(1 + (n%/%2)):n)
-          quacc.table[x, y] <- 1/sqrt(2) * (first + second)
+          for(i in 1:k) {
+            fold.indices <- which(folds==i, arr.ind=TRUE)
+            fold.res <- general.linear.quacc(x, y, S, tau, data, train.indices=fold.indices)
+            quacc.vals[i] <- fold.res[1]
+            quacc.vars[i] <- fold.res[2]
+          }
+          quacc.table[x, y] <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
         }
 
       }
@@ -713,6 +652,7 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
     }
   }
 
+  # Symmetrize the matrix
   for(x in 1:num_cols) {
     for(y in 1:x) {
       quacc.table[y, x] <- quacc.table[x, y]
