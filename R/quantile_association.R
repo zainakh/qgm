@@ -99,8 +99,10 @@ calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, correl=FALSE, v
 #' @param x Not the index, but the actual values of column x with a padded intercept
 #' @param y Not the index, but the actual values of column y with a padded intercept
 #' @param hs Which way to calculate the bandwidth of quantiles
+#' @param filter If we want to remove/filter out certain datapoints
+#' @param filt.indices Which data point indices we want to keep if we choose to filter
 #' @return Jittered version of your input data frame
-koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
+koenker.sandwich <- function(rq.object, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
   # Get constants
   eps <- .Machine$double.eps^(1/2)
   tau <- rq.object$tau
@@ -111,8 +113,18 @@ koenker.sandwich <- function(rq.object, x, y, hs=TRUE) {
   while((tau - h < 0) || (tau + h > 1)) h <- h/2
 
   # Calculate Hendricks-Koenker sandwich
-  bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
-  blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
+  if(filter){ # Filter for y, the regressor
+
+    x.filt <- x[filt.indices, , drop = FALSE]
+    y.filt <- y[filt.indices]
+
+    bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h, method = rq.object$method)$coef
+    blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h, method = rq.object$method)$coef
+  }
+  else{ # Assume independence in density of var y and another variable that dictates filt.indices
+    bhi <- quantreg::rq.fit(x, y, tau = tau + h, method = rq.object$method)$coef
+    blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
+  }
 
   dyhat <- as.matrix(x) %*% (bhi - blo)
   f <- pmax(0, (2 * h)/(dyhat - eps))
@@ -196,7 +208,11 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
-  data <- data[sample(nrow(data)),] # Randomly shuffle
+
+  set.seed(123)
+  data <- data[sample(nrow(data)),] # Randomly shuffle with fixed seed
+  set.seed(NULL)
+
   n <- length(data[,1])
   folds <- cut(seq(1, nrow(data)), breaks=k, labels=FALSE)
 
@@ -500,7 +516,11 @@ linear.quacc <- function(x, y, S, suffStat) {
   complete.columns <- c(x, y, S)
   complete_cases_indices <- complete.cases(data[, complete.columns])
   data <- data[complete_cases_indices, ]
-  data <- data[sample(nrow(data)),] # Randomly shuffle
+
+  set.seed(123)
+  data <- data[sample(nrow(data)),] # Randomly shuffle with fixed seed
+  set.seed(NULL)
+
   n <- length(data[,1])
   folds <- cut(seq(1, nrow(data)), breaks=k, labels=FALSE)
 
@@ -561,11 +581,19 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
             data.subset <- data.subset[complete_cases_indices, ]
           }
 
-
-          n <- length(data.subset[,1])
           k <- 5
           quacc.vals <- rep(0, k)
           quacc.vars <- rep(0, k)
+
+          complete.columns <- c(x, y, S)
+          complete_cases_indices <- complete.cases(data.subset[, complete.columns])
+          data.subset <- data.subset[complete_cases_indices, ]
+
+          set.seed(123)
+          data.subset <- data.subset[sample(nrow(data.subset)),] # Randomly shuffle with fixed seed
+          set.seed(NULL)
+
+          n <- length(data.subset[,1])
           folds <- cut(seq(1, nrow(data.subset)), breaks=k, labels=FALSE)
 
           if(rho) {
