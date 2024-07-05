@@ -342,7 +342,7 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
   G.ecdf <- ecdf(var2.test)
 
   # Calculate QuACC and normalize
-  if(tau <= 0.5) {
+  if(tau < 0.5) {
     c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
     quacc <- c.below - tau^2
 
