@@ -220,7 +220,8 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
     fold.indices <- which(folds==i, arr.ind=TRUE)
     quacc.vals[i] <- quacc.rho.singular(x, y, S, tau, data, train.indices=fold.indices)
   }
-  quacc <- median(quacc.vals)
+  quacc <- mean(quacc.vals)
+  #quacc <- median(quacc.vals)
   return(quacc)
 
 }
