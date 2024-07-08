@@ -220,7 +220,7 @@ linear.quacc.rho <- function(x, y, S, suffStat) {
     fold.indices <- which(folds==i, arr.ind=TRUE)
     quacc.vals[i] <- quacc.rho.singular(x, y, S, tau, data, train.indices=fold.indices)
   }
-  quacc <- mean(quacc.vals)
+  quacc <- median(quacc.vals)
   return(quacc)
 
 }
@@ -531,6 +531,8 @@ linear.quacc <- function(x, y, S, suffStat) {
     quacc.vars[i] <- fold.res[2]
   }
   quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
+  #quacc.var.estimate <- median(quacc.vars + (quacc.vals - mean(quacc.vals))^2)
+  #quacc <- median(quacc.vals) / sqrt( quacc.var.estimate )
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
@@ -611,6 +613,8 @@ pairwise.test <- function(data, tau, weights="marginal", quacc=TRUE, rho=FALSE) 
               quacc.vars[i] <- fold.res[2]
             }
             quacc.table[x, y] <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
+            #quacc.var.estimate <- median(quacc.vars + (quacc.vals - mean(quacc.vals))^2)
+            #quacc.table[x, y] <- median(quacc.vals) / sqrt( quacc.var.estimate )
           }
 
         }
