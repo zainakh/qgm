@@ -389,6 +389,163 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
 }
 
 
+#' Tests QuACC given linear quantile regression estimators is S is empty otherwise uses honest random forests
+#' and then returns a p-value.
+#'
+#' @param x Index of a column
+#' @param y Index of a column (not equal to x)
+#' @param S Conditioning set to be used to determine if conditional independence exists (can be empty set)
+#' @param suffStat The dataframe of data (there is no sufficient statistic for this calculation)
+#' @return pvalue corresponding to if the quantile level
+rf.quacc <- function(x, y, S, suffStat) {
+
+  koenker.sandwich <- function(tau, x, y, hs=TRUE, filter=FALSE, filt.indices=c(0)) {
+    # Get constants
+    eps <- .Machine$double.eps^(1/2)
+    tau <- tau
+    n <- length(y)
+
+    # Check for valid h
+    h <- quantreg::bandwidth.rq(tau, n, hs = hs)
+    while((tau - h < 0) || (tau + h > 1)) h <- h/2
+
+    # Calculate Hendricks-Koenker sandwich
+    if(filter){ # Filter for y, the regressor
+
+      x.filt <- x[filt.indices, , drop = FALSE]
+      y.filt <- y[filt.indices]
+
+      bhi <- quantreg::rq.fit(x.filt, y.filt, tau = tau + h)$coef
+      blo <- quantreg::rq.fit(x.filt, y.filt, tau = tau - h)$coef
+    }
+    else{ # Assume independence in density of var y and another variable that dictates filt.indices
+      bhi <- quantreg::rq.fit(x, y, tau = tau + h)$coef
+      blo <- quantreg::rq.fit(x, y, tau = tau - h)$coef
+    }
+
+    dyhat <- as.matrix(x) %*% (bhi - blo)
+    f <- pmax(0, (2 * h)/(dyhat - eps))
+    return(f)
+  }
+
+  singular.quacc <- function(x, y, S, tau, data, train.indices) {
+    data.train <- data[train.indices, ]
+    data.test <- data[-train.indices, ]
+    n.train <- length(data.train[,1])
+    n.test <- length(data.test[,1])
+    var1.test <- data.test[, x]
+    var2.test <- data.test[, y]
+
+    if(length(S) == 0){
+      q1 <- quantreg::rq(as.formula(paste(colnames(data)[x], "~1")),
+                         data.train,
+                         tau=tau)
+
+      q2 <- quantreg::rq(as.formula(paste(colnames(data)[y], "~1")),
+                         data.train,
+                         tau=tau)
+
+      fit.q1 <- predict(q1, newdata=data.test[, S, drop=FALSE])
+      fit.q2 <- predict(q2, newdata=data.test[, S, drop=FALSE])
+    }
+    else {
+      q1 <- grf::quantile_forest(X=data.train[, S, drop=FALSE],
+                                 Y=data.train[, x],
+                                 honesty = TRUE,
+                                 quantiles = c(tau))
+
+      q2 <- grf::quantile_forest(X=data.train[, S, drop=FALSE],
+                                 Y=data.train[, y],
+                                 honesty = TRUE,
+                                 quantiles = c(tau))
+
+      fit.q1 <- predict(q1, data.test[, S, drop=FALSE], quantiles = c(tau))$predictions
+      fit.q2 <- predict(q2, data.test[, S, drop=FALSE], quantiles = c(tau))$predictions
+    }
+
+    # CDF estimations
+    F.ecdf <- ecdf(var1.test)
+    G.ecdf <- ecdf(var2.test)
+
+    # Calculate QuACC and normalize
+    if(tau < 0.5) {
+      c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+      quacc <- c.below - tau^2
+
+      var.term <- tau^2 * (1 - tau)^2
+
+      filt.indices.var1 <- which(var2.test < fit.q2)
+      filt.indices.var2 <- which(var1.test < fit.q1)
+
+      C <- as.matrix(F.ecdf(fit.q1))
+      D <- as.matrix(G.ecdf(fit.q2))
+    }
+    else{
+      c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+      quacc <- c.above - (1 - tau)^2
+
+      var.term <- (1 - tau)^2 * (1 - (1 - tau))^2
+
+      filt.indices.var1 <- which(var2.test > fit.q2)
+      filt.indices.var2 <- which(var1.test > fit.q1)
+
+      C <- 1 - as.matrix(F.ecdf(fit.q1))
+      D <- 1 - as.matrix(G.ecdf(fit.q2))
+    }
+
+    # Density estimations
+    A <- as.matrix( koenker.sandwich(tau, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1) )
+    B <- as.matrix( koenker.sandwich(tau, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2) )
+
+    # Compute variance terms in QuACC
+    kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
+    kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+
+    # Compute QuACC
+    s <- 0.5 * n.train # Default sample.fraction parameter in grf
+    sigma1 <- (n.train / s) * (H1 / A^2)
+    sigma2 <- (n.train / s) * (H2 / B^2)
+
+    quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
+
+
+
+    quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
+    return(c(quacc, quacc.var))
+  }
+
+  tau <- readRDS("tau.rds")
+  k <- 5
+  quacc.vals <- rep(0, k)
+  quacc.vars <- rep(0, k)
+
+  data <- suffStat
+  complete.columns <- c(x, y, S)
+  complete_cases_indices <- complete.cases(data[, complete.columns])
+  data <- data[complete_cases_indices, ]
+
+  set.seed(123)
+  data <- data[sample(nrow(data)),] # Randomly shuffle with fixed seed
+  set.seed(NULL)
+
+  n <- length(data[,1])
+  folds <- cut(seq(1, nrow(data)), breaks=k, labels=FALSE)
+
+  for(i in 1:k) {
+    fold.indices <- which(folds!=i, arr.ind=TRUE) # Train on all but kth fold, evaluate on fold
+    fold.res <- singular.quacc(x, y, S, tau, data, train.indices=fold.indices)
+    quacc.vals[i] <- fold.res[1]
+    quacc.vars[i] <- fold.res[2]
+  }
+  #quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
+
+  # Calculate p-value of QuACC
+  #p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
+  return(quacc)
+}
+
+
+
 #' Tests QuACC given linear quantile regression estimators and returns a p-value.
 #'
 #' @param x Index of a column
@@ -493,8 +650,8 @@ linear.quacc <- function(x, y, S, suffStat) {
     padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
 
     # Density estimations
-    A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1)))
-    B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
+    A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1)))
+    B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2)))
 
     # Compute variance terms in QuACC
     kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C

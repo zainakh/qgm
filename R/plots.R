@@ -82,6 +82,7 @@ plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=
     pc_graph@graph@edgeData@data = data_var
     qgm.igraph.plot(pc_graph@graph, weights=use.weights)
   }
+  return(pc_graph@graph)
 }
 
 
