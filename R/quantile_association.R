@@ -492,23 +492,41 @@ rf.quacc <- function(x, y, S, suffStat) {
       C <- 1 - as.matrix(F.ecdf(fit.q1))
       D <- 1 - as.matrix(G.ecdf(fit.q2))
     }
+    padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
 
     # Density estimations
-    A <- as.matrix( koenker.sandwich(tau, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1) )
-    B <- as.matrix( koenker.sandwich(tau, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2) )
+    A <- as.matrix( diag( koenker.sandwich(tau, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1) ) )
+    B <- as.matrix( diag( koenker.sandwich(tau, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2) ) )
+    A.vec <- as.matrix(diag(A))
+    B.vec <- as.matrix(diag(B))
 
-    # Compute variance terms in QuACC
-    kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
-    kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+    # Compute kappa terms in QuACC
+    kappa.var1 <- (1 / n.test) * t(A.vec) %*% C
+    kappa.var2 <- (1 / n.test) * t(B.vec) %*% D
+
+    # Compute terms in variance of RF estimator
+    w1 <- apply(grf::get_forest_weights(q1), 2, sum)
+    w1.rq <- rq(data.train[, x] ~ as.matrix(data.train[, S, drop=FALSE]), weights=w1)
+    resid1 <- residuals(w1.rq)
+
+    w2 <- apply(grf::get_forest_weights(q2), 2, sum)
+    w2.rq <- quantreg::rq(data.train[, y] ~ as.matrix(data.train[, S, drop=FALSE]), weights=w2)
+    resid2 <- residuals(w2.rq)
+
+    check_function <- function(u, tau) {
+      tau * (u >= 0) - (1 - tau) * (u < 0)
+    }
+
+    loss.H1 <- check_function(resid1, tau)
+    loss.H2 <- check_function(resid2, tau)
+
+    H1 <- var(loss.H1)
+    H2 <- var(loss.H2)
 
     # Compute QuACC
     s <- 0.5 * n.train # Default sample.fraction parameter in grf
-    sigma1 <- (n.train / s) * (H1 / A^2)
-    sigma2 <- (n.train / s) * (H2 / B^2)
-
-    quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
-
-
+    sigma1 <- (n.train / s) * (H1 / (t(A.vec) %*% A.vec))
+    sigma2 <- (n.train / s) * (H2 / (t(B.vec) %*% B.vec))
 
     quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
     return(c(quacc, quacc.var))
@@ -537,7 +555,7 @@ rf.quacc <- function(x, y, S, suffStat) {
     quacc.vals[i] <- fold.res[1]
     quacc.vars[i] <- fold.res[2]
   }
-  #quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
+  quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
 
   # Calculate p-value of QuACC
   #p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
@@ -579,7 +597,7 @@ linear.quacc <- function(x, y, S, suffStat) {
       blo <- quantreg::rq.fit(x, y, tau = tau - h, method = rq.object$method)$coef
     }
 
-    dyhat <- as.matrix(x) %*% (bhi - blo)
+    dyhat <- x %*% (bhi - blo)
     f <- pmax(0, (2 * h)/(dyhat - eps))
     return(f)
   }
@@ -621,7 +639,7 @@ linear.quacc <- function(x, y, S, suffStat) {
 
     # Calculate QuACC and normalize
     if(tau < 0.5) {
-      c.below <- sum((var1.test < fit.q1) & (var2.test < fit.q2)) / n.test
+      c.below <- mean( (var1.test < fit.q1) & (var2.test < fit.q2) )
       quacc <- c.below - tau^2
 
       var.term <- tau^2 * (1 - tau)^2
@@ -633,7 +651,7 @@ linear.quacc <- function(x, y, S, suffStat) {
       D <- as.matrix(G.ecdf(fit.q2))
     }
     else{
-      c.above <- sum((var1.test > fit.q1) & (var2.test > fit.q2)) / n.test
+      c.above <- mean( (var1.test > fit.q1) & (var2.test > fit.q2) )
       quacc <- c.above - (1 - tau)^2
 
       var.term <- (1 - tau)^2 * (1 - (1 - tau))^2
@@ -650,8 +668,8 @@ linear.quacc <- function(x, y, S, suffStat) {
     padded.z <- as.matrix(cbind(rep(1, n.test), data.test[, S, drop=FALSE]))
 
     # Density estimations
-    A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=TRUE, filt.indices=filt.indices.var1)))
-    B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=TRUE, filt.indices=filt.indices.var2)))
+    A <- as.matrix(diag(koenker.sandwich(q1, x=padded.z, y=var1.test, filter=FALSE, filt.indices=filt.indices.var1)))
+    B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
 
     # Compute variance terms in QuACC
     kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
@@ -660,6 +678,12 @@ linear.quacc <- function(x, y, S, suffStat) {
     # Compute QuACC
     sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
     sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
+
+    print(dim(A))
+    print(dim(C))
+    print(dim(kappa.var1))
+    print(dim(sigma1))
+    print('A')
 
     quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
     return(c(quacc, quacc.var))
@@ -694,7 +718,7 @@ linear.quacc <- function(x, y, S, suffStat) {
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(p_val)
+  return(quacc)
 }
 
 

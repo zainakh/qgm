@@ -117,7 +117,13 @@ plot.marginal.table <- function(df, tau, weights="marginal", quacc=TRUE, rho=FAL
   data <- expand.grid(X=colnames(df), Y=colnames(df))
   data$P <- as.vector(table.data)
   ggplot2::ggplot(data, ggplot2::aes(X, Y, fill=P)) +
-    ggplot2::geom_tile() +
-    ggplot2::scale_fill_gradient(low="white", high="blue") +
-    ggplot2::geom_text(ggplot2::aes(label=round(P, digits=3)))
+    ggplot2::geom_tile(show.legend = FALSE) +
+    ggplot2::geom_text(ggplot2::aes(label=round(P, digits=2)), size=4) +
+    ggplot2::scale_fill_gradientn(limits=c(-1, 1), colors=c("blue", "white", "red")) +
+    ggplot2::coord_equal() +
+    ggplot2::theme(axis.title.x=element_blank(),
+                   axis.title.y=element_blank(),
+                   axis.text.x = ggplot2::element_text(angle = 45, hjust = 1),
+                   axis.text.y = ggplot2::element_text(angle = 45, hjust = 1)
+    )
 }
