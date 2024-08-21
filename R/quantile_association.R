@@ -71,10 +71,15 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
 #' @param verbose Print verbose independence tests results
 #' @param adj_vector Return vector form of adjacency matrix
 #' @return Graph or adjacency vector of underlying relationships
-calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
+calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, linear=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
   saveRDS(tau, "tau.rds")
   if(quacc) {
-    pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
+    if(linear) {
+      pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
+    }
+    else{
+      pc_graph <- pcalg::skeleton(data, indepTest = rf.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
+    }
   }
   else {
     if(correl) {
@@ -558,8 +563,8 @@ rf.quacc <- function(x, y, S, suffStat) {
   quacc <- sum(quacc.vals) / sqrt( sum(quacc.vars) )
 
   # Calculate p-value of QuACC
-  #p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(quacc)
+  p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
+  return(p_val)
 }
 
 
@@ -718,7 +723,7 @@ linear.quacc <- function(x, y, S, suffStat) {
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(quacc)
+  return(p_val)
 }
 
 
