@@ -47,13 +47,13 @@ qgm.igraph.plot <- function(g, weights=TRUE, layout=igraph::layout_in_circle,
 #' @param quacc If you want to calculate the linear QuACC statistic versus the general no train/test statistic
 #' @return Nothing
 #' @examples plot.quantile.dag(df, tau=0.5)
-plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=TRUE, linear=TRUE, correl=FALSE, rho=FALSE) {
+plot.quantile.dag <- function(data, tau, m.max=Inf, weights="marginal", verbose=FALSE, quacc=TRUE, linear=TRUE, correl=FALSE, rho=FALSE, alpha=0.05) {
   if(tau <= 0 | tau >= 1) {
     return("Tau must be within 0 and 1 (non-inclusive)")
   }
 
   #data <- jitter.columns(data, factor=0.1)
-  pc_graph <- calculate.skeleton(data, tau, m.max=m.max, quacc=quacc, linear=linear, correl=correl, verbose=verbose, adj_vector=FALSE)
+  pc_graph <- calculate.skeleton(data, tau, m.max=m.max, quacc=quacc, linear=linear, correl=correl, verbose=verbose, adj_vector=FALSE, alpha=alpha)
 
   n <- length((colnames(data)))
   lookup_table <- matrix(0, nrow=n, ncol=n)

@@ -71,23 +71,23 @@ adjacency.similarity <- function(actual, predicted, precision=TRUE, recall=FALSE
 #' @param verbose Print verbose independence tests results
 #' @param adj_vector Return vector form of adjacency matrix
 #' @return Graph or adjacency vector of underlying relationships
-calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, linear=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE) {
+calculate.skeleton <- function(data, tau, m.max=Inf, quacc=TRUE, linear=TRUE, correl=FALSE, verbose=FALSE, adj_vector=FALSE, alpha=0.05) {
   saveRDS(tau, "tau.rds")
   if(quacc) {
     if(linear) {
-      pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
+      pc_graph <- pcalg::skeleton(data, indepTest = linear.quacc, labels = colnames(data), alpha = alpha, verbose = verbose, NAdelete=FALSE, m.max=m.max)
     }
     else{
-      pc_graph <- pcalg::skeleton(data, indepTest = rf.quacc, labels = colnames(data), alpha = 0.05, verbose = verbose, NAdelete=FALSE, m.max=m.max)
+      pc_graph <- pcalg::skeleton(data, indepTest = rf.quacc, labels = colnames(data), alpha = alpha, verbose = verbose, NAdelete=FALSE, m.max=m.max)
     }
   }
   else {
     if(correl) {
       suffStat <- list(C = cor(data), n = nrow(data))
-      pc_graph <- pcalg::skeleton(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = 0.05, verbose = verbose, m.max=m.max)
+      pc_graph <- pcalg::skeleton(suffStat, indepTest = pcalg::gaussCItest, labels = colnames(data), alpha = alpha, verbose = verbose, m.max=m.max)
     }
     else{
-      pc_graph <- pcalg::skeleton(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = 0.05, verbose = verbose, m.max=m.max)
+      pc_graph <- pcalg::skeleton(data, indepTest = orig.quantile.ztest, labels = colnames(data), alpha = alpha, verbose = verbose, m.max=m.max)
     }
   }
   unlink("tau.rds")
@@ -457,12 +457,12 @@ rf.quacc <- function(x, y, S, suffStat) {
       q1 <- grf::quantile_forest(X=data.train[, S, drop=FALSE],
                                  Y=data.train[, x],
                                  honesty = TRUE,
-                                 quantiles = c(tau))
+                                 quantiles = c(tau), min.node.size=50)
 
       q2 <- grf::quantile_forest(X=data.train[, S, drop=FALSE],
                                  Y=data.train[, y],
                                  honesty = TRUE,
-                                 quantiles = c(tau))
+                                 quantiles = c(tau), min.node.size=50)
 
       fit.q1 <- predict(q1, data.test[, S, drop=FALSE], quantiles = c(tau))$predictions
       fit.q2 <- predict(q2, data.test[, S, drop=FALSE], quantiles = c(tau))$predictions
@@ -510,7 +510,7 @@ rf.quacc <- function(x, y, S, suffStat) {
     kappa.var2 <- (1 / n.test) * t(B.vec) %*% D
 
     # Compute terms in variance of RF estimator
-    w1 <- apply(grf::get_forest_weights(q1), 2, sum)
+    w1 <- apply(grf::get_forest_weights(q1), 2, sum) # Sum over the training
     w1.rq <- rq(data.train[, x] ~ as.matrix(data.train[, S, drop=FALSE]), weights=w1)
     resid1 <- residuals(w1.rq)
 
@@ -564,7 +564,7 @@ rf.quacc <- function(x, y, S, suffStat) {
 
   # Calculate p-value of QuACC
   p_val <- 2 * pnorm(abs(quacc), lower.tail = FALSE)
-  return(p_val)
+  return(quacc)
 }
 
 
@@ -683,12 +683,6 @@ linear.quacc <- function(x, y, S, suffStat) {
     # Compute QuACC
     sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
     sigma2 <- tau * (1 - tau) * s2$Hinv * s2$J * s2$Hinv
-
-    print(dim(A))
-    print(dim(C))
-    print(dim(kappa.var1))
-    print(dim(sigma1))
-    print('A')
 
     quacc.var <- ((var.term) + (t(kappa.var1) %*% sigma1 %*% kappa.var1)[1] + (t(kappa.var2) %*% sigma2 %*% kappa.var2)[1]) / (n.test)
     return(c(quacc, quacc.var))
