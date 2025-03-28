@@ -382,8 +382,8 @@ general.linear.quacc <- function(x, y, S, data, tau, train.indices) {
   B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
 
   # Compute variance terms in QuACC
-  kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
-  kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+  kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% D
+  kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% C
 
   # Compute QuACC
   sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
@@ -506,8 +506,8 @@ rf.quacc <- function(x, y, S, suffStat) {
     B.vec <- as.matrix(diag(B))
 
     # Compute kappa terms in QuACC
-    kappa.var1 <- (1 / n.test) * t(A.vec) %*% C
-    kappa.var2 <- (1 / n.test) * t(B.vec) %*% D
+    kappa.var1 <- (1 / n.test) * t(A.vec) %*% D
+    kappa.var2 <- (1 / n.test) * t(B.vec) %*% C
 
     # Compute terms in variance of RF estimator
     w1 <- apply(grf::get_forest_weights(q1), 2, sum) # Sum over the training
@@ -677,8 +677,8 @@ linear.quacc <- function(x, y, S, suffStat) {
     B <- as.matrix(diag(koenker.sandwich(q2, x=padded.z, y=var2.test, filter=FALSE, filt.indices=filt.indices.var2)))
 
     # Compute variance terms in QuACC
-    kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% C
-    kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% D
+    kappa.var1 <- (1 / n.test) * t(padded.z) %*% A %*% D
+    kappa.var2 <- (1 / n.test) * t(padded.z) %*% B %*% C
 
     # Compute QuACC
     sigma1 <- tau * (1 - tau) * s1$Hinv * s1$J * s1$Hinv
