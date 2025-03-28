@@ -65,7 +65,7 @@ df <- linear.quantile.dgp()
 head(df)
  ```
  
- If we plot `Y` against `Z`, we can see that at the upper tail of `Z`, there is a slight positive association but otherwise there doesn't appear to be a strong relationship throughout the median area. See how when $Z > 1.2$, then $Y > -1$ whereas this is not true in general.
+ If we plot `Y` against `Z`, we can see that at the upper tail of `Z`, there is a slight positive association but otherwise there doesn't appear to be a strong relationship throughout the median area. See how when $Z > 1.2$, then $Y$ has an upwards trajectory whereas this is not true in general.
  
  ![Y plotted against Z!](/demo/dgp-association.png "Example of DGP associations.")
 
