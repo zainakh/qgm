@@ -65,7 +65,7 @@ df <- linear.quantile.dgp()
 head(df)
  ```
  
- If we plot `Y` against `Z`, we can see that at the tails of `Z`, there is a negative association but otherwise there doesn't appear to be a strong relationship. 
+ If we plot `Y` against `Z`, we can see that at the upper tail of `Z`, there is a positive association but otherwise there doesn't appear to be a strong relationship throughout the median area. 
  
  ![Y plotted against Z!](/demo/dgp-association.png "Example of DGP associations.")
 
@@ -76,7 +76,10 @@ g <- igraph::make_graph(~ Z--Y, Z--X, Y--W, X--W)
 op <- par(mar=c(1,1,1,1))
 igraph::plot.igraph(g,layout=igraph::layout_in_circle,vertex.size=30,vertex.color="lightblue")
  ```
-But note that based on the above plots that variables may not be related at all quantiles the same way! For example, comparing `Y` and `Z` above, we see that at the median of both variables we would not expect to see an edge between the two as their relationship appears noisy at best. However at the upper and lower tails of Z there is a negative association between the two. 
+  ![DGP Graph!](/demo/dgp.png "Data generating process.")
+ 
+ 
+But note that based on the above plots that variables may not be related at all quantiles the same way! For example, comparing `Y` and `Z` above, we see that at the median of both variables we would not expect to see an edge between the two as their relationship appears noisy at best. However at the upper tail of Z there is a positive association between the two. 
 
 
 ## Running QGM and analyzing results
