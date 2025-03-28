@@ -1,4 +1,4 @@
-# qgm
+# qgm: Quantile Graphical Models
 This repository is based on the paper [Quantile Graph Discovery through QuACC: Quantile Association via Conditional Concordance](https://arxiv.org/abs/2411.17033). Take a look at it for details on motivation, underlying proofs, and real world results on large-scale biobanks.
 
 # Motivation
