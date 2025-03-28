@@ -14,7 +14,9 @@ devtools::install_github("zainakh/qgm")
 library(qgm)
 ```
 
-# Example Script
+# Example
+
+## Additional Dependencies (aka: `R` package managers are not fun) 
 A quick demo of how to get started is as follows. Start by installing dependencies that aren't installed automatically by CRAN (as of Mar 2025 you still have to do this on R version 4.4.1). This is required to use the `pcalg` library.
 
 ```
@@ -25,7 +27,7 @@ BiocManager::install(c("graph", "RBGL"))
 
 ```
 
-Load in some dependencies for QGM and for the data generating process we will use:
+Lets load in dependencies for our data generating process and case study below:
  ```
 library(pcalg)
 library(igraph)
@@ -33,7 +35,7 @@ library(msm)
 library(qgm)
 library(quantreg)
 ```
-
+## Create dataset that exhibits effects of interest
 Create a dataset that has tail dependent effects.  
 ```
 linear.quantile.dgp <- function(n=1000) {
@@ -76,14 +78,17 @@ igraph::plot.igraph(g,layout=igraph::layout_in_circle,vertex.size=30,vertex.colo
  ```
 But note that based on the above plots that variables may not be related at all quantiles the same way! For example, comparing `Y` and `Z` above, we see that at the median of both variables we would not expect to see an edge between the two as their relationship appears noisy at best. However at the upper and lower tails of Z there is a negative association between the two. 
 
+
+## Running QGM and analyzing results
 Let's run the QGM algorithm and see what the resulting graphs are. At the median quantile, $\tau = 0.5$, we have
 
  ![QGM at median!](/demo/qgm-median.png "QGM at the median.")
 
 When we look at boundary quantiles, $\tau = 0.9$, we have
 
- ![QGM at upper tails!](/demo/dgp-association.png "QGM at the upper tail.")
+ ![QGM at upper tails!](/demo/qgm-upper.png "QGM at the upper tail.")
 
+This is working as intended! Because of the relationship between `Y` and `Z`, we don't expect their edge to show up in the median graph but we do expect it at the extreme tails.
  
  
  
