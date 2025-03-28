@@ -1,6 +1,7 @@
-# Motivation
-
+# qgm
 This repository is based on the paper [Quantile Graph Discovery through QuACC: Quantile Association via Conditional Concordance](https://arxiv.org/abs/2411.17033). Take a look at it for details on motivation, underlying proofs, and real world results on large-scale biobanks.
+
+# Motivation
 
 Graphical structure learning is an effective way to assess and visualize cross-biomarker dependencies in biomedical settings. Standard approaches to estimating graphs rely on conditional independence tests that may not be sensitive to associations that manifest at the tails of joint distributions, i.e., they may miss connections among variables that exhibit associations mainly at lower or upper quantiles. 
 
