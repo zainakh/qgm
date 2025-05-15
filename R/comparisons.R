@@ -289,7 +289,7 @@ belloni_adj_matrix <- function(data, tau, u_q, lambda1 = 60, lambda2 = 10, toler
     y_k <- matrix(data[, , k, drop = FALSE], nrow = n, ncol = t)
     X_k <- data[, , -k, drop = FALSE] # Regress on ALL other variables
     # Fit ADMM method
-    coeffs <- admm_l1_nuclear_norm_qr_v7_r(
+    coeffs <- qgm::admm_l1_nuclear_norm_qr_v7_r(
       y = y_k,
       x = X_k,
       u_quantile = u_q,
