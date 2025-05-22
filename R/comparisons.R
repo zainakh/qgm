@@ -277,7 +277,7 @@ admm_l1_nuclear_norm_qr_v7_r <- function(
 #' @param lambda2: The second penalty parameter for the QGM method.
 #' @param coef_threshold: A threshold below which estimated coefficients are considered zero.
 #' @return A list containing the true directed adjacency matrix and the estimated undirected adjacency matrix.
-belloni_adj_matrix <- function(data, tau, u_q, lambda1 = 60, lambda2 = 10, tolerance = 1e-2, iterations = 4000, coef_threshold = 1e-5) {
+belloni_adj_matrix <- function(data, tau, lambda1 = 60, lambda2 = 10, tolerance = 1e-2, iterations = 4000, coef_threshold = 1e-5) {
   # This matrix will store estimated coefficients where entry (k, j) is the
   # QGM coefficient of Y_j in the regression of Y_k using Y_{\setminus k}.
   n <- dim(data)[1]
@@ -292,7 +292,7 @@ belloni_adj_matrix <- function(data, tau, u_q, lambda1 = 60, lambda2 = 10, toler
     coeffs <- qgm::admm_l1_nuclear_norm_qr_v7_r(
       y = y_k,
       x = X_k,
-      u_quantile = u_q,
+      u_quantile = tau,
       lamb1_orig = lambda1,
       lamb2_orig = lambda2,
       tol = tolerance,
